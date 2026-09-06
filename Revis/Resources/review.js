@@ -52,7 +52,9 @@
   var blocks = [];         // data-rv index -> element
   var meta = [];           // data-rv index -> { role, path }
   var annotations = [];    // as handed over by the app
-  var colours = {};        // intent -> colour
+  var colours = {};        // intent -> colour, assigned by the app
+  var images = {};         // intent (and "…:resolved", "pending") -> the mark, as a data URL
+  var zoom = 1;            // the page's own zoom, divided back out of the margin furniture
   var selectedID = "";
   var tool = "select";
   var ranges = {};         // annotation id -> Range, for hit-testing a click
@@ -386,6 +388,7 @@
     var z = (typeof value === "number" && value > 0) ? value : fitZoom();
     z = Math.max(0.35, Math.min(3, z));
     page.style.zoom = z;
+    zoom = z;
     /* After the reflow, not during it: every mark's position is measured, and measuring
        mid-layout reads the geometry the page is leaving rather than the one it is
        arriving at. */
@@ -421,8 +424,9 @@
 
   // ---------------------------------------------------------------- drawing
 
-  window.rvSetColours = function (map) {
+  window.rvSetColours = function (map, marks) {
     colours = map || {};
+    images = marks || images;
     paint();
   };
 
@@ -459,9 +463,24 @@
    * of bug that shows up as a marker left behind after something was resolved. */
   function paint() {
     ranges = {};
-    paintHighlights();
-    paintRegions();
-    paintMarkers();
+    /* Each stage guarded separately, and each failure reported.
+     *
+     * Everything the page draws is drawn from measured geometry, and a single throw in
+     * here used to take the rest of the drawing with it — the marks vanished, the
+     * highlights vanished, and there was NOTHING to see: no console anybody can open, no
+     * error, just a page that had quietly stopped painting. Reported, one bad stage costs
+     * one stage; unreported, the only symptom is an app that looks like it does not work. */
+    guarded("highlights", paintHighlights);
+    guarded("regions", paintRegions);
+    guarded("markers", paintMarkers);
+  }
+
+  function guarded(stage, work) {
+    try {
+      work();
+    } catch (e) {
+      post("error", { stage: stage, message: (e && e.message) || String(e) });
+    }
   }
 
   /* Text highlights are drawn with the Custom Highlight API rather than by wrapping the
@@ -537,31 +556,67 @@
    *
    * Beside the BLOCK, not beside the selected words: an annotation on the third sentence
    * of a paragraph belongs beside the paragraph, because that is the thing being talked
-   * about. Marks landing on the same line stack sideways rather than on top of each
-   * other. */
+   * about.
+   *
+   * Each element IS a slot; the mark is drawn inside it as a centred background image at a
+   * fixed painted size. That is what lets a mark grow under the pointer without moving
+   * anything beside it — it scales about the middle of a slot that does not move.
+   *
+   * Sizes are PAINTED, then divided by the page zoom. A mark is furniture, not content: it
+   * should be the same size on screen at 200% as at 50%, because it is a control. Left to
+   * inherit the zoom it grew with the words, which is how the margin ended up with a
+   * fifteen-point mark painted at twenty-six.
+   */
+  var SLOT = 21;           // painted; the box a mark lives in
+  var MARK = 15;           // painted; the mark drawn inside it
+  var SLOT_COLS = 2;       // marks on one line sit side by side, then wrap
+
   function paintMarkers() {
     gutter.innerHTML = "";
     var origin = gutter.getBoundingClientRect();
+    var slot = SLOT / zoom;
     var rows = {};
     for (var i = 0; i < annotations.length; i++) {
       var a = annotations[i];
       var block = blocks[a.blocks[0]];
       if (!block) continue;
-      var top = block.getBoundingClientRect().top - origin.top;
-      var row = Math.round(top / 22);           // marks within a line share a row
-      var slot = rows[row] = (rows[row] === undefined ? 0 : rows[row] + 1);
+      var box = block.getBoundingClientRect();
+      /* Against the block's FIRST LINE rather than its middle: a mark beside a
+         twelve-line paragraph should point at where the paragraph starts, which is where
+         the eye is when it meets it.
+         NOT divided by the zoom, unlike the sizes below. `getBoundingClientRect` reports
+         CSS pixels — the element's own, unzoomed coordinate space — for anything inside a
+         `zoom`ed subtree, and `style.top` is read in that same space. Dividing put every
+         mark a proportion of the way up the page: at 119% they sat forty points high, next
+         to the heading above the paragraph they belonged to. The SIZES are a different
+         question and do divide: a mark should be the same size on screen at any zoom. */
+      var top = box.top - origin.top;
+      var row = Math.round(top / (slot * 0.75));   // marks close together share a row
+      var index = rows[row] = (rows[row] === undefined ? 0 : rows[row] + 1);
 
-      var mark = document.createElement("button");
-      mark.type = "button";
-      mark.className = "rv-marker" + (a.id === selectedID ? " current" : "")
-        + (a.status === "resolved" ? " resolved" : "");
-      mark.style.top = top + "px";
-      mark.style.right = (slot * 9) + "px";
-      mark.style.setProperty("--rv-colour", colours[a.intent] || "#9a9a9e");
+      var mark = document.createElement("div");
+      mark.className = "rv-marker"
+        + (a.id === selectedID ? " current" : "")
+        + (a.id === "draft" ? " pending" : "");
+      mark.style.width = slot + "px";
+      mark.style.height = slot + "px";
+      mark.style.backgroundSize = (MARK / zoom) + "px";
+      mark.style.backgroundImage = imageFor(a);
+      mark.style.left = ((index % SLOT_COLS) * slot) + "px";
+      mark.style.top = (top - slot / 2
+                        + Math.floor(index / SLOT_COLS) * slot) + "px";
       mark.setAttribute("data-rv-for", a.id);
-      mark.setAttribute("aria-label", a.intent);
+      mark.setAttribute("title", a.intent);
       gutter.appendChild(mark);
     }
+  }
+
+  /* Which image a mark wears. Asked for by name rather than assembled here, because the
+     app owns what an intent looks like and the page is not allowed a second opinion. */
+  function imageFor(a) {
+    var key = a.id === "draft" ? "pending"
+            : (a.status === "resolved" ? a.intent + ":resolved" : a.intent);
+    return images[key] ? "url(\"" + images[key] + "\")" : "none";
   }
 
   // ----------------------------------------------------------------- picking

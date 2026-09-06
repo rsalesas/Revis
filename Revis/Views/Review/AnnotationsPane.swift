@@ -211,13 +211,9 @@ struct AnnotationsPane: View {
                         get: { model.annotation(annotation.id)?.intent ?? annotation.intent },
                         set: { model.setIntent($0, for: annotation.id) }))
                 } else {
-                    Image(systemName: annotation.intent.symbol)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(colour)
-                        .frame(width: 14)
-                    Text(annotation.intent.title)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(colour)
+                    // The same metrics as the picker's own label, so nothing moves when
+                    // the row is chosen and one is swapped for the other.
+                    IntentLabel(intent: annotation.intent)
                 }
                 Spacer()
                 if annotation.status == .resolved {
@@ -339,10 +335,44 @@ private struct RevealIfSelected: ViewModifier {
     }
 }
 
+/// An intent's symbol and name, at metrics that do not depend on which intent it is.
+///
+/// Both fixed, and both load-bearing. SF Symbols have different intrinsic widths —
+/// `pencil.line` is far wider than `checkmark` — so an icon left to size itself moved the
+/// title beside it every time the intent changed, and in a menu it moved the chevron too:
+/// the control appeared to twitch as you chose from it. The name is boxed to the widest of
+/// the seven for the same reason.
+///
+/// Shared by the plain row and the menu so a row does not shift when it becomes selected
+/// and swaps one for the other.
+private struct IntentLabel: View {
+    let intent: Intent
+
+    /// Wide enough for "Question", the longest of the seven at this size. Measured by
+    /// eye and then given a point of slack, because a name that just fits is a name that
+    /// clips on the first system font change.
+    static let titleWidth: CGFloat = 54
+    static let iconSide: CGFloat = 13
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: intent.symbol)
+                .font(.system(size: 10, weight: .semibold))
+                // A square, and centred in it: the frame is what makes every symbol
+                // occupy the same space whatever shape it is.
+                .frame(width: Self.iconSide, height: Self.iconSide)
+            Text(intent.title)
+                .font(.system(size: 10, weight: .semibold))
+                .frame(width: Self.titleWidth, alignment: .leading)
+        }
+        .foregroundStyle(AnnotationPalette.color(for: intent))
+    }
+}
+
 /// The intent, as a compact menu.
 ///
 /// A menu rather than a segmented control or a row of icons, because there are seven and a
-/// review pane is 280 points wide. The current choice is shown with its colour and its
+/// review pane is 300 points wide. The current choice is shown with its colour and its
 /// symbol, so a glance at the row says what kind of thing it is without the menu being
 /// opened.
 struct IntentPicker: View {
@@ -358,13 +388,7 @@ struct IntentPicker: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: intent.symbol)
-                    .font(.system(size: 10, weight: .semibold))
-                Text(intent.title)
-                    .font(.system(size: 10, weight: .semibold))
-            }
-            .foregroundStyle(AnnotationPalette.color(for: intent))
+            IntentLabel(intent: intent)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.visible)

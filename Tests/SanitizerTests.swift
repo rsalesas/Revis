@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import AppKit
 @testable import Revis
 
 /// The sanitizer is the one place where being wrong is a security bug rather than a
@@ -108,5 +109,37 @@ struct AnnotationTests {
             document: .empty, annotations: [annotation])
         #expect(!ReviewExport.markdown(file, filter: .open).contains("done"))
         #expect(ReviewExport.markdown(file, filter: .all).contains("Do not act on these"))
+    }
+}
+
+/// The margin marks are rasterised SF Symbols. A symbol name that does not exist fails
+/// silently — `NSImage(systemSymbolName:)` returns nil, the data URL comes back empty, and
+/// the margin simply has nothing in it — so the names are checked rather than trusted.
+@MainActor
+struct AnnotationSymbolTests {
+
+    @Test func everyIntentHasAMarkAndAHollowOne() {
+        let images = AnnotationSymbols.images()
+        for intent in Intent.allCases {
+            let mark = images[intent.rawValue] ?? ""
+            #expect(mark.hasPrefix("data:image/png;base64,"), "no mark for \(intent.rawValue)")
+            #expect(mark.count > 200, "mark for \(intent.rawValue) is empty")
+            let resolved = images["\(intent.rawValue):resolved"] ?? ""
+            #expect(resolved.hasPrefix("data:image/png;base64,"))
+        }
+        #expect((images["pending"] ?? "").hasPrefix("data:image/png;base64,"))
+    }
+
+    @Test func theSymbolNamesResolve() {
+        for name in [AnnotationSymbols.marker, AnnotationSymbols.resolved,
+                     AnnotationSymbols.pending] {
+            #expect(NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
+                    "\(name) is not an SF Symbol on this system")
+        }
+        // Every intent's own glyph, which the pane and the menu draw.
+        for intent in Intent.allCases {
+            #expect(NSImage(systemSymbolName: intent.symbol, accessibilityDescription: nil) != nil,
+                    "\(intent.symbol) is not an SF Symbol on this system")
+        }
     }
 }

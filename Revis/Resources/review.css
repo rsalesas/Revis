@@ -199,37 +199,47 @@ html[data-rv-tool="region"] #rv-sheet {
 
 #rv-gutter {
   position: absolute;
-  top: 0; bottom: 0; right: 0;
-  width: calc(var(--rv-gutter-width) + 12px);
+  top: 0; bottom: 0;
+  /* Inside the sheet's right padding, not against its edge. Flush right, the marks sat
+     half on the paper and half on the desk behind it, which reads as the window having
+     clipped them rather than as the page carrying them. */
+  right: 20px;
+  width: var(--rv-gutter-width);
   pointer-events: none;
 }
 
+/* The mark itself is an SF Symbol rendered by the app and set as a background image.
+   It was drawn here in CSS once — a bordered circle with an inset shadow for the core and
+   an outer shadow for the chosen state — and it could not be made to look right: every
+   dimension became a fraction of a device pixel once the page's zoom was applied, and each
+   box snapped to the grid on its own. One image scaled as a unit cannot do that.
+
+   The ELEMENT is a slot; the image is drawn inside it, centred, at a fixed painted size.
+   That is what lets a mark grow under the pointer without moving anything beside it. */
 .rv-marker {
   position: absolute;
-  width: 13px; height: 13px;
-  margin: 0; padding: 0;
-  border: 2px solid var(--rv-colour);
-  border-radius: 50%;
-  background: var(--rv-colour);
-  box-shadow: inset 0 0 0 2px var(--rv-sheet);
-  cursor: pointer;
+  background-repeat: no-repeat;
+  background-position: center;
+  box-sizing: border-box;
   pointer-events: auto;
-  appearance: none;
-  transition: transform var(--rv-motion-hover-duration) var(--rv-motion-hover),
-              box-shadow var(--rv-motion-hover-duration) var(--rv-motion-hover);
+  cursor: default;
+  z-index: 2;
+  transition: transform 90ms ease-out;
 }
-.rv-marker:hover { transform: scale(1.18); }
-.rv-marker.current {
-  transform: scale(1.25);
-  box-shadow: inset 0 0 0 2px var(--rv-sheet),
-              0 0 0 3px color-mix(in srgb, var(--rv-colour) 35%, transparent);
-}
-/* A resolved mark is hollow. It is still on the page — the review records that it was
-   dealt with, not that it never happened — but it should not read as outstanding. */
-.rv-marker.resolved {
-  background: transparent;
-  box-shadow: none;
-  opacity: 0.55;
+
+/* There is no separate selected state, and no glow. A mark grows under the pointer and
+   STAYS grown once it is chosen, because those are the same thing to look at: you point at
+   it, it answers, you click, it holds. A halo behind the chosen one was tried — it drew
+   more in order to say less, and at fractional pixel sizes it read as a smudge. The slot is
+   sized so the grown mark still fits inside it. */
+.rv-marker:hover,
+.rv-marker.current { transform: scale(1.25); }
+
+/* A mark being written, standing in the slot its mark will take. Not a target — the pane
+   has the keyboard, and the only two ways out of a draft are to write it or abandon it. */
+.rv-marker.pending {
+  opacity: 0.9;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

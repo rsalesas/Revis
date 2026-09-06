@@ -50,6 +50,22 @@ Both have a bug behind them; do not relax either.
 - `Models/Annotation.swift` — the anchor model, and the reasoning for carrying four
   addresses for one place.
 
+## Debugging the page
+
+There is no console to open on a `WKWebView` inside an app, which makes a drawing failure
+present as "the margin is empty" with nothing to go on. Two things exist so that never
+happens again:
+
+- Set `REVIS_PAGE_LOG=/path/to/log` in the environment and the page's failures — a script
+  that would not evaluate, a drawing stage that threw — are written there. Unset, nothing
+  is written. Launch with `REVIS_PAGE_LOG=… Revis.app/Contents/MacOS/Revis &` and then
+  `open -a Revis <file>` so the running instance (with the variable) gets the document.
+- `paint()` guards each stage separately and reports the failure, so one bad stage costs
+  one stage rather than the whole page.
+
+`run()` in `DocumentWebView` reports evaluation failures rather than swallowing them. Do
+not put that `try?` back.
+
 ## Testing
 
 `xcodebuild -project Revis.xcodeproj -scheme Revis test`, or `./scripts/build.sh` first if
@@ -57,4 +73,11 @@ you added a file. Swift Testing, not XCTest. Fixtures are read out of the source
 `#filePath` and excluded from the bundle, so a fixture is added by dropping a file into
 `Tests/Fixtures`.
 
-The JavaScript runtime has no tests yet, and that is the biggest gap in the suite.
+`BridgeTests` checks the Swift↔page bridge from the Swift side: that every `window.rv*`
+entry point Swift calls is defined, and that every module-level variable the runtime
+assigns to is declared. That second one is not paranoia — a search-and-replace that
+silently did not match left `images` and `zoom` undeclared, every push threw under
+`"use strict"`, and the app simply looked unfinished.
+
+`node --check Revis/Resources/review.js` catches syntax errors if node is to hand. The
+runtime's behaviour still has no tests, which is the biggest remaining gap.

@@ -182,7 +182,7 @@ struct Anchor: Codable, Equatable, Hashable, Sendable {
 /// the file would then disagree with itself about which note was which.
 struct Annotation: Identifiable, Codable, Equatable, Sendable {
     var id: UUID = UUID()
-    var created: Date = Date()
+    var created: Date = .reviewStamp
     var author: String
     var intent: Intent
     /// What the reviewer wrote. May be empty for an approval, where the mark is the point.
@@ -210,5 +210,21 @@ extension Array where Element == Annotation {
             if a.1 != b.1 { return a.1 < b.1 }
             return a.2 < b.2
         }
+    }
+}
+
+
+extension Date {
+    /// Now, to the second.
+    ///
+    /// The file writes dates as ISO 8601, which has no fractional part — so an annotation
+    /// held in memory with sub-second precision was a different value from the same
+    /// annotation read back off disk, and a review did not survive a round trip. The
+    /// precision was never meaningful (nobody needs to know a note was written 340
+    /// milliseconds into the minute); dropping it where the value is MADE, rather than
+    /// tolerating the drift where it is compared, is what makes save-and-reopen an
+    /// identity.
+    static var reviewStamp: Date {
+        Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
     }
 }

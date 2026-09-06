@@ -191,10 +191,28 @@ struct DocumentWebView: NSViewRepresentable {
             pendingTool = view.tool
         }
 
+        /// Evaluate a script in the review's own content world.
+        ///
+        /// The failure is REPORTED, not swallowed. It was swallowed — `try? result.get()`
+        /// — and that cost an afternoon: a script that failed to parse silently did none
+        /// of the several things it carried, so the margin had no marks, the zoom never
+        /// fitted, and the page looked like code that had simply not been written. A
+        /// pushed script failing is not a rare edge; it is the normal consequence of
+        /// building JavaScript out of interpolated Swift, and it has to be audible.
         func run(_ script: String, then: (@MainActor (Any?) -> Void)? = nil) {
             webView?.evaluateJavaScript(script, in: nil, in: world) { result in
                 MainActor.assumeIsolated {
-                    then?(try? result.get())
+                    switch result {
+                    case .success(let value):
+                        then?(value)
+                    case .failure(let error):
+                        // Head and length, not the whole thing: one of these scripts
+                        // carries every margin symbol as a data URL and is a quarter of a
+                        // megabyte, which is not a log line.
+                        PageLog.write("script failed (\(script.count) chars):"
+                            + " \(error.localizedDescription) — \(script.prefix(90))")
+                        then?(nil)
+                    }
                 }
             }
         }
@@ -206,15 +224,24 @@ struct DocumentWebView: NSViewRepresentable {
             switch kind {
             case "ready":
                 hasStamped = true
+                PageLog.write("ready \(dict["blocks"] ?? "?") blocks")
                 let blocks = (dict["blocks"] as? Int) ?? 0
                 onReady?(blocks, OutlineItem.decode(dict["outline"]))
-                // Everything the model already knew about, now that there is a document to
-                // draw it on.
-                run("window.rvSetColours && window.rvSetColours(\(AnnotationPalette.json()));"
-                    + "window.rvSetZoom && window.rvSetZoom(\(pendingZoom));"
-                    + "window.rvSetTool && window.rvSetTool(\(jsQuoted(pendingTool.rawValue)));"
-                    + "window.rvSelect && window.rvSelect(\(jsQuoted(pendingCurrent)));"
-                    + "window.rvSetAnnotations && window.rvSetAnnotations("
+                // Everything the model already knew about, now that there is a document
+                // to draw it on.
+                //
+                // One call each, deliberately. They were a single script, and when it
+                // failed it took all five with it — no marks, no zoom, no tool — which
+                // presents as an app that does not work rather than as one call that did
+                // not parse. Five calls cost five round trips into a web view that is
+                // already loaded; that is nothing next to being unable to tell which of
+                // five things broke.
+                run("window.rvSetColours && window.rvSetColours(\(AnnotationPalette.json()),"
+                    + " \(AnnotationSymbols.json()));")
+                run("window.rvSetZoom && window.rvSetZoom(\(pendingZoom));")
+                run("window.rvSetTool && window.rvSetTool(\(jsQuoted(pendingTool.rawValue)));")
+                run("window.rvSelect && window.rvSelect(\(jsQuoted(pendingCurrent)));")
+                run("window.rvSetAnnotations && window.rvSetAnnotations("
                     + "\(jsQuoted(pendingAnnotations)));")
                 lastAnnotations = pendingAnnotations
                 lastCurrent = pendingCurrent
@@ -227,6 +254,15 @@ struct DocumentWebView: NSViewRepresentable {
                 if let value = dict["value"] as? Double { onZoom?(value) }
             case "fit":
                 if let value = dict["value"] as? Double { onFit?(value) }
+            case "debug":
+                PageLog.write(String(describing: dict))
+            case "error":
+                // The page cannot report a problem any other way: there is no console to
+                // open on a WKWebView inside an app, so a drawing failure would otherwise
+                // present as "the margin is empty" with nothing to go on.
+                let stage = (dict["stage"] as? String) ?? "?"
+                let message = (dict["message"] as? String) ?? "?"
+                PageLog.write("error while painting \(stage): \(message)")
             case "region":
                 if let raw = dict["anchor"], let anchor = Anchor.decode(json: raw) {
                     onRegion?(anchor)
@@ -330,5 +366,29 @@ extension OutlineItem {
               let items = try? JSONDecoder().decode([OutlineItem].self, from: data)
         else { return [] }
         return items
+    }
+}
+
+
+/// A file the page can be made to talk into.
+///
+/// A `WKWebView` inside an app has no console anybody can open, and `NSLog` from a document
+/// window did not reach `log show` reliably enough to debug against. A file always works,
+/// and "the margin is empty and nothing said why" is a bad enough afternoon to be worth one.
+/// Off unless `REVIS_PAGE_LOG` names a path, so a shipped build writes nothing.
+enum PageLog {
+    private static let url: URL? = ProcessInfo.processInfo.environment["REVIS_PAGE_LOG"]
+        .map { URL(fileURLWithPath: $0) }
+
+    static func write(_ message: String) {
+        guard let url else { return }
+        let line = "\(Date().timeIntervalSince1970) \(message)\n"
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            try? handle.write(contentsOf: Data(line.utf8))
+            try? handle.close()
+        } else {
+            try? Data(line.utf8).write(to: url)
+        }
     }
 }

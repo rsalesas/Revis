@@ -78,7 +78,7 @@ struct ReviewDocument: FileDocument {
     /// place to open a document rather than as a blank page.
     init() {
         file = ReviewFile(source: SourceInfo(name: "Untitled", path: nil,
-                                             capturedAt: Date(), digest: ""),
+                                             capturedAt: .reviewStamp, digest: ""),
                           document: .empty)
     }
 
@@ -96,7 +96,7 @@ struct ReviewDocument: FileDocument {
         let html = String(decoding: data, as: UTF8.self)
         let name = configuration.file.filename ?? "Document"
         file = ReviewFile(
-            source: SourceInfo(name: name, path: nil, capturedAt: Date(),
+            source: SourceInfo(name: name, path: nil, capturedAt: .reviewStamp,
                                digest: SourceInfo.digest(of: data)),
             document: .empty)
         pendingHTML = html
