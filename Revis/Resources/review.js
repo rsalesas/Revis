@@ -635,7 +635,13 @@
       mark.style.top = (top - slot / 2
                         + Math.floor(index / SLOT_COLS) * slot) + "px";
       mark.setAttribute("data-rv-for", a.id);
-      mark.setAttribute("title", a.intent);
+      /* A real control rather than a decorated div: it is the only way to reach an
+         annotation from the page without a mouse, and it is what puts the mark in the
+         accessibility tree at all. */
+      mark.setAttribute("role", "button");
+      mark.setAttribute("tabindex", "0");
+      mark.setAttribute("aria-label", a.intent + " annotation"
+                        + (a.status === "resolved" ? ", resolved" : ""));
       gutter.appendChild(mark);
     }
   }
@@ -656,12 +662,23 @@
      resolved against the stored ranges instead. */
   function handleClick(event) {
     var target = event.target;
-    while (target && target !== document.body) {
-      var id = target.getAttribute && target.getAttribute("data-rv-for");
+    var walker = target;
+    while (walker && walker !== document.body) {
+      var id = walker.getAttribute && walker.getAttribute("data-rv-for");
       if (id) { post("pick", { id: id }); return; }
-      target = target.parentElement;
+      walker = walker.parentElement;
     }
     if (tool !== "select") return;
+    /* Only inside the document itself.
+     *
+     * Below this the click is resolved by asking which annotation's text is under the
+     * pointer — and out in the margin there is no text under the pointer, so
+     * `caretRangeFromPoint` answers with the nearest position it can find, which is the
+     * end of some line beside it. A click that MISSED a marker was therefore picking
+     * whatever annotation happened to own that line: the wrong card, and worse, usually a
+     * plausible-looking one. Markers hit-test themselves in the walk above; if the walk did
+     * not find one, a click out here meant nothing. */
+    if (!doc || !doc.contains(target)) return;
     var caret = document.caretRangeFromPoint
       ? document.caretRangeFromPoint(event.clientX, event.clientY) : null;
     if (!caret) return;
