@@ -35,7 +35,14 @@ struct CollapsibleSidePane<Main: View, Pane: View>: View {
     var body: some View {
         HStack(spacing: 0) {
             if edge == .leading { collapsingPane }
-            main
+            // CLIPPED. SwiftUI gives the main content a frame during a layout animation
+            // but does not stop it drawing outside one — and an `NSViewRepresentable` is
+            // a real view whose bounds do not necessarily follow the animated frame frame
+            // for frame. So the document drew straight over the pane beside it: the sheet
+            // ran under the annotations and its text was covered until the web view caught
+            // up. Clipped, the worst a lagging web view can do is show a hard edge for a
+            // frame, which is what every other document window does while it resizes.
+            main.clipped()
             if edge == .trailing { collapsingPane }
         }
         // On the split, not on the pane: this is what makes the document's width
