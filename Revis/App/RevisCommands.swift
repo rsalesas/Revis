@@ -25,9 +25,12 @@ struct RevisCommands: Commands {
                     // which is a guess about when the round trip lands rather than a fact
                     // about it.
                     Button(intent.title) { review?.beginAnnotation(intent) }
+                        // Insert asks only for a caret; the rest act on something and need
+                        // it selected.
+                        .disabled(review.map { !$0.canAnnotate(intent) } ?? true)
                 }
             }
-            .disabled(review?.hasSelection != true)
+            .disabled(review == nil)
 
             Divider()
             Button("Resolve Annotation") {

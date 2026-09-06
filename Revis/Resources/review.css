@@ -71,6 +71,28 @@ body {
   position: relative;
   width: 920px;
   margin: 0 auto;
+  /* Ease the zoom rather than cutting to it.
+   *
+   * A pane animating its width resizes the web view, and the resize arrives as a coarse,
+   * front-loaded stream — the first sample of an opening pane lands about half way
+   * through, so the first refit is one big step. Add WebKit's own repaint latency and the
+   * result reads as a snap when the document is SHRINKING and as a harmless gap when it is
+   * growing: stale content that is too wide gets clipped, stale content that is too narrow
+   * just leaves a margin for a frame.
+   *
+   * A short transition smooths the steps into each other and covers the latency. Shorter
+   * than the pane's own quarter-second on purpose: this is following a movement, not
+   * performing one, and a transition as long as the thing it is chasing would still be
+   * arriving after the pane had stopped. */
+  transition: zoom 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Not while the reviewer is stepping the zoom themselves: pressing + should change the
+   size, not start a small animation toward it. */
+html[data-rv-zooming] #rv-page { transition: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  #rv-page { transition: none; }
 }
 
 /* Zoomed past the fit, the sheet is wider than the window — as a page is in any viewer.

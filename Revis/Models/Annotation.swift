@@ -241,6 +241,13 @@ struct Anchor: Codable, Equatable, Hashable, Sendable {
     /// True when this was drawn as an area rather than selected as text.
     var isRegion: Bool { rect != nil }
 
+    /// True when this names a PLACE rather than a span — a caret between two words.
+    ///
+    /// An insertion has no span by nature: you are not marking words, you are naming a gap.
+    /// The quote is then the words immediately before the point, so the instruction still
+    /// reads as something a reader can find by searching.
+    var isPoint: Bool { start >= 0 && start == end }
+
     /// The quote, shortened for a one-line row. Never mid-word, and never so short that
     /// it stops identifying the passage.
     func summary(limit: Int = 120) -> String {

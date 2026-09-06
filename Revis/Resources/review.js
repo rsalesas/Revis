@@ -261,11 +261,50 @@
     return out.length ? out : [indexOfBlock(first)];
   }
 
+  /* Where the caret is, when there is no selection.
+   *
+   * An insertion has no span by nature — you are not marking words, you are naming a
+   * place between them — and requiring a selection to say "put something here" makes the
+   * reviewer choose an arbitrary word to stand for a gap.
+   *
+   * The anchor is still made of text, because everything here is: the quote is the words
+   * immediately BEFORE the caret, so the instruction reads "insert after …", which is a
+   * place a reader can find by searching. `start` and `end` are equal, which is what marks
+   * it as a point rather than a span. */
+  function anchorForCaret() {
+    var sel = window.getSelection();
+    if (!sel || !sel.isCollapsed || !sel.rangeCount) return null;
+    var range = sel.getRangeAt(0);
+    var block = blockOf(range.startContainer);
+    if (!block || !doc.contains(block)) return null;
+
+    var at = offsetWithin(block, range.startContainer, range.startOffset);
+    var text = block.textContent;
+    var index = indexOfBlock(block);
+    // Back to a word boundary, so the quote is words rather than a fragment ending
+    // mid-syllable — "…the retention worker runs" and not "…the retention worker ru".
+    var head = text.slice(Math.max(0, at - CONTEXT), at);
+    var space = head.search(/\S/) > 0 ? head.indexOf(" ") : -1;
+    if (at - CONTEXT > 0 && space > 0) head = head.slice(space + 1);
+    return {
+      blocks: [index],
+      path: meta[index] ? meta[index].path : "",
+      role: meta[index] ? meta[index].role : "block",
+      quote: flatten(head),
+      prefix: edged(text.slice(Math.max(0, at - CONTEXT * 2), Math.max(0, at - CONTEXT)),
+                    "start"),
+      suffix: edged(text.slice(at, at + CONTEXT), "end"),
+      start: at,
+      end: at,
+      rect: null,
+    };
+  }
+
   /* The app asks for this when the reviewer presses Add. Asynchronous by nature — reading
      the DOM from Swift is a round trip — so it is a plain return value the caller
      receives through `evaluateJavaScript`'s completion handler. */
   window.rvCaptureSelection = function () {
-    return JSON.stringify(anchorForSelection());
+    return JSON.stringify(anchorForSelection() || anchorForCaret());
   };
 
   /* Anchor a whole block, for annotating something with no text to select — a rule, an
@@ -405,6 +444,11 @@
     fitting = !(typeof value === "number" && value > 0);
     var z = fitting ? fitZoom() : value;
     z = Math.max(0.35, Math.min(3, z));
+    /* An explicit zoom is a step, not a chase: pressing + should change the size rather
+       than animate toward it. Only a fit follows something and wants easing. */
+    var root = document.documentElement;
+    if (fitting) root.removeAttribute("data-rv-zooming");
+    else root.setAttribute("data-rv-zooming", "");
     page.style.zoom = z;
     zoom = z;
     /* After the reflow, not during it: every mark's position is measured, and measuring
@@ -797,7 +841,15 @@
        than offered and then refused. */
     document.addEventListener("selectionchange", function () {
       var sel = window.getSelection();
-      post("selection", { has: !!(sel && !sel.isCollapsed && flatten(sel.toString())) });
+      var has = !!(sel && !sel.isCollapsed && flatten(sel.toString()));
+      // A caret inside the document is enough to insert AT — a place, rather than a run of
+      // words — so the toolbar is told about it separately.
+      var caret = !has && !!(sel && sel.isCollapsed && sel.rangeCount
+                             && doc && doc.contains(
+                               sel.getRangeAt(0).startContainer.nodeType === 3
+                                 ? sel.getRangeAt(0).startContainer.parentElement
+                                 : sel.getRangeAt(0).startContainer));
+      post("selection", { has: has, caret: caret });
     });
     /* Marks and boxes are positioned from measured geometry, so anything that reflows the
        page has to redraw them.

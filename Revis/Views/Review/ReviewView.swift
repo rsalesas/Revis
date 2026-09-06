@@ -70,6 +70,16 @@ struct ReviewView: View {
         }
     }
 
+    /// What a type button says about itself — including, when it is unavailable, what
+    /// would make it available. Insert is the one that needs only a caret: naming a place
+    /// between two words is not something you can do by selecting words.
+    private func helpFor(_ intent: Intent) -> String {
+        if model.canAnnotate(intent) { return "\(intent.title) — \(intent.directive)" }
+        return intent == .insert
+            ? "Click where the new text should go, or select the text it follows"
+            : "Select some text in the document first"
+    }
+
     /// The count, stated once. A window that says "9 open" in its subtitle does not need
     /// the pane open to tell you there is something to look at.
     private var subtitle: String {
@@ -99,7 +109,10 @@ struct ReviewView: View {
                 model.outline = outline
                 model.isPreparing = false
             },
-            onSelectionChanged: { model.hasSelection = $0 },
+            onSelectionChanged: { hasSelection, hasCaret in
+                model.hasSelection = hasSelection
+                model.hasCaret = hasCaret
+            },
             onPick: { id in
                 // The draft's own mark is not something to select — it is already the
                 // thing being worked on.
@@ -169,9 +182,8 @@ struct ReviewView: View {
                 .foregroundStyle(AnnotationPalette.color(for: intent))
                 // Disabled rather than hidden: a control you can see and cannot use says
                 // why, and a missing one says nothing at all.
-                .disabled(!model.hasSelection)
-                .help(model.hasSelection ? "\(intent.title) — \(intent.directive)"
-                      : "Select some text in the document first")
+                .disabled(!model.canAnnotate(intent))
+                .help(helpFor(intent))
             }
         }
 

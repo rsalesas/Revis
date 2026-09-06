@@ -60,6 +60,15 @@ final class ReviewModel: ObservableObject {
     /// Whether the reviewer has text selected in the document. Reported by the runtime, so
     /// Add can be disabled rather than offered and then refused.
     @Published var hasSelection = false
+    /// Whether the caret is somewhere in the document with nothing selected. Enough to
+    /// INSERT at — a place between words — and not enough for anything else, since every
+    /// other operation acts on something.
+    @Published var hasCaret = false
+
+    /// Whether an annotation of this kind can be made right now.
+    func canAnnotate(_ intent: Intent) -> Bool {
+        hasSelection || (intent == .insert && hasCaret)
+    }
     /// True until the runtime has reported back. The pane says "preparing" rather than
     /// "no annotations", which would be a claim it cannot yet make.
     @Published var isPreparing = true
@@ -270,7 +279,7 @@ final class ReviewModel: ObservableObject {
     /// through `receive(anchor:)` — nothing happens here if there is no selection, which
     /// is why the command is disabled without one rather than failing silently.
     func beginAnnotation(_ intent: Intent? = nil) {
-        guard hasSelection else { return }
+        guard canAnnotate(intent ?? defaultIntent) else { return }
         pendingIntent = intent
         captureToken &+= 1
     }

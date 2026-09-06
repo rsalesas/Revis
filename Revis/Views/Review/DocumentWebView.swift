@@ -40,7 +40,7 @@ struct DocumentWebView: NSViewRepresentable {
     var revealBlockToken: Int
 
     var onReady: ((Int, [OutlineItem]) -> Void)?
-    var onSelectionChanged: ((Bool) -> Void)?
+    var onSelectionChanged: ((Bool, Bool) -> Void)?
     var onPick: ((String) -> Void)?
     var onAnchor: ((Anchor?) -> Void)?
     /// The page reporting the zoom it settled on, and what "fit" currently means.
@@ -174,7 +174,7 @@ struct DocumentWebView: NSViewRepresentable {
         var onFit: ((Double) -> Void)?
 
         var onReady: ((Int, [OutlineItem]) -> Void)?
-        var onSelectionChanged: ((Bool) -> Void)?
+        var onSelectionChanged: ((Bool, Bool) -> Void)?
         var onPick: ((String) -> Void)?
         var onRegion: ((Anchor) -> Void)?
 
@@ -247,7 +247,8 @@ struct DocumentWebView: NSViewRepresentable {
                 lastCurrent = pendingCurrent
                 lastTool = pendingTool
             case "selection":
-                onSelectionChanged?((dict["has"] as? Bool) ?? false)
+                onSelectionChanged?((dict["has"] as? Bool) ?? false,
+                                    (dict["caret"] as? Bool) ?? false)
             case "pick":
                 if let id = dict["id"] as? String { onPick?(id) }
             case "zoom":

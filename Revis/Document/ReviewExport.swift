@@ -153,7 +153,11 @@ enum ReviewExport {
         var out = "\n### \(number). \(annotation.intent.title) — \(location(annotation))\n\n"
         out += "\(annotation.intent.directive)\n\n"
 
-        if annotation.anchor.isRegion {
+        if annotation.anchor.isPoint {
+            // A place, not a span. Saying "find this text" of a caret would be asking the
+            // reader to replace the words that happen to precede it.
+            out += "**Insert immediately after this text**\n\n"
+        } else if annotation.anchor.isRegion {
             let count = annotation.anchor.blocks.count
             let subject = count == 1 ? "block" : "\(count) blocks"
             out += "**Applies to** the \(subject) the reviewer drew a box around, whose"

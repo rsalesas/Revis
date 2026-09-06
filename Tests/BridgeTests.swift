@@ -229,3 +229,39 @@ struct ReviewModelTests {
         #expect(try JSONDecoder().decode(Intent.self, from: Data("\"remove\"".utf8)) == .remove)
     }
 }
+
+/// Inserting names a PLACE, not a span, and the two are exported differently.
+@MainActor
+struct InsertionPointTests {
+
+    private var point: Anchor {
+        Anchor(blocks: [21], path: "4. Deletion mechanics › paragraph 1", role: "paragraph",
+               quote: "and issues deletes against primary storage and each replica in turn.",
+               prefix: "The retention worker runs hourly. It selects expired records,",
+               suffix: " Backups are not rewritten;", start: 142, end: 142, rect: nil)
+    }
+
+    @Test func aCaretIsAPointAndNotASpan() {
+        #expect(point.isPoint)
+        #expect(!point.isRegion)
+        // A span of the same text is not a point, however short.
+        var span = point
+        span.end = span.start + 1
+        #expect(!span.isPoint)
+    }
+
+    /// The export must not tell a reader to "find this text" when the text is merely what
+    /// the caret happened to follow — that reads as an instruction to replace it.
+    @Test func theExportSaysAfterRatherThanFind() {
+        let file = ReviewFile(
+            source: SourceInfo(name: "s", path: nil, capturedAt: .reviewStamp, digest: ""),
+            document: .empty,
+            annotations: [Annotation(author: "R", intent: .insert,
+                                     note: "Say what happens when a replica is offline.",
+                                     anchor: point)])
+        let markdown = ReviewExport.markdown(file)
+        #expect(markdown.contains("Insert immediately after this text"))
+        #expect(!markdown.contains("**Find this text**"))
+        #expect(markdown.contains("Insert new content immediately AFTER the quoted text."))
+    }
+}
