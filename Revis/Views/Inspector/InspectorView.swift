@@ -54,14 +54,34 @@ struct InspectorView: View {
         }
     }
 
-    /// How many marks sit on a heading's block.
+    /// The blocks a heading's SECTION covers: itself, then everything up to the next
+    /// heading at its own level or higher.
     ///
-    /// Only the heading itself, not its section: working out where a section ends means
-    /// deciding what counts as inside it, and a count that is sometimes the section and
-    /// sometimes the line would be worse than no count. What this is for is the common
-    /// case — somebody annotated a heading — and it says so exactly.
+    /// A nested heading's blocks belong to its parent as well, which is what anybody
+    /// reading an outline expects — "3. Retention periods" counts what is in 3.1, 3.2 and
+    /// 3.3, because those are in it.
+    private func section(of item: OutlineItem) -> Range<Int> {
+        guard let index = model.outline.firstIndex(where: { $0.block == item.block })
+        else { return item.block..<(item.block + 1) }
+        let end = model.outline[(index + 1)...]
+            .first { $0.level <= item.level }?.block ?? model.blockCount
+        return item.block..<Swift.max(item.block + 1, end)
+    }
+
+    /// How many annotations are in a heading's section.
+    ///
+    /// It used to count only the heading's OWN line, on the reasoning that deciding where
+    /// a section ends was a judgement not worth making. That was the wrong call and it
+    /// showed: the number then appeared beside whichever headings happened to have been
+    /// annotated directly and nowhere else, which reads as arbitrary — it drew the
+    /// question "what are these supposed to be?", which is the only review a piece of
+    /// interface can fail. A count beside a heading means "in here"; where a section ends
+    /// is not, in fact, hard.
     private func markCount(in item: OutlineItem) -> Int {
-        model.annotations.filter { $0.anchor.blocks.contains(item.block) }.count
+        let span = section(of: item)
+        return model.annotations.filter { annotation in
+            annotation.anchor.blocks.contains { span.contains($0) }
+        }.count
     }
 
     // MARK: - Document
@@ -222,6 +242,9 @@ private struct OutlineRow: View {
                         .foregroundStyle(Theme.accent)
                         .padding(.horizontal, 4).padding(.vertical, 1)
                         .background(Theme.accent.opacity(0.14), in: Capsule())
+                        // A number with no label has to be able to say what it is.
+                        .help("\(markCount) annotation\(markCount == 1 ? "" : "s") in this"
+                              + " section")
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 5)

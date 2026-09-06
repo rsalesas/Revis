@@ -119,6 +119,20 @@ struct ReviewView: View {
     // MARK: - Toolbar
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        // The outline's toggle sits at the LEADING edge, because that is the side the
+        // outline is on. A control that opens something should be on the same side as the
+        // thing it opens — it is the one place a toolbar can say which of two panes it
+        // means without a word of explanation, and it is where every split-view app on
+        // this platform puts it.
+        ToolbarItem(placement: .navigation) {
+            Button {
+                withMotion(.panel) { model.inspectorVisible.toggle() }
+            } label: {
+                Label("Outline", systemImage: "sidebar.leading")
+            }
+            .help("Show or hide the outline and document details")
+        }
+
         ToolbarItemGroup(placement: .principal) {
             Picker("Tool", selection: $model.tool) {
                 ForEach(ReviewTool.allCases) { tool in
@@ -187,12 +201,6 @@ struct ReviewView: View {
             }
             .help("Show or hide the annotations")
 
-            Button {
-                withMotion(.panel) { model.inspectorVisible.toggle() }
-            } label: {
-                Label("Inspector", systemImage: "sidebar.leading")
-            }
-            .help("Show or hide the outline and document details")
         }
     }
 }

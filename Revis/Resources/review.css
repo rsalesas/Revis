@@ -272,7 +272,10 @@ html[data-rv-tool="region"] #rv-sheet {
 .rv-marker { border-radius: 50%; }
 .rv-marker:hover { transform: scale(1.12); }
 .rv-marker.current {
-  box-shadow: 0 0 0 2px var(--rv-sheet), 0 0 0 3.5px var(--rv-colour);
+  /* Tight against the mark: half a point of the element's own margin, then a point and a
+     half of page, then the ring. Further out it stopped reading as a ring around THIS
+     thing and started reading as a second circle near it. */
+  box-shadow: 0 0 0 1.5px var(--rv-sheet), 0 0 0 3px var(--rv-colour);
 }
 
 /* A mark being written, standing in the slot its mark will take. Not a target — the pane

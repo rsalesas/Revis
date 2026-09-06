@@ -618,12 +618,12 @@
    * One column, not several. Vaelora stacks its marks three across because it has a whole
    * page margin to play with; this gutter is thirty-four points wide, and two columns of a
    * hittable box do not fit in it. Marks on the same line stack downward instead. */
-  /* The element is the mark plus a little air — the ROOM for the chosen state's ring,
-     and no more. It does not have to be a big target any more: pressing anywhere on the
+  /* The element is the mark plus half a point — just enough for the chosen state's ring
+     to sit against it rather than out at arm's length. It does not have to be a big target any more: pressing anywhere on the
      line does that (see `pressGutter`), so the box can be the size the mark wants to be
      rather than the size a pointer needs. */
-  var SLOT_W = 24;         // painted; the box a mark lives in
-  var SLOT_H = 24;
+  var SLOT_W = 20;         // painted; the box a mark lives in
+  var SLOT_H = 20;
   var MARK = 19;           // painted; the mark drawn inside it
   var SLOT_COLS = 1;
 
