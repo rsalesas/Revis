@@ -118,16 +118,28 @@ struct AnnotationTests {
 @MainActor
 struct AnnotationSymbolTests {
 
-    @Test func everyIntentHasAMarkAndAHollowOne() {
+    /// Every state of every kind has a picture, and they are all different pictures.
+    ///
+    /// The last part is the one with a bug behind it: a draft's mark was drawn in Change's
+    /// amber whatever kind was being written, so it announced itself as the wrong thing
+    /// until the moment it was added. A per-intent key that quietly returned the same image
+    /// for all seven would pass a test that only asked whether the key existed.
+    @Test func everyIntentHasAMarkForEveryState() {
         let images = AnnotationSymbols.images()
+        var seen: Set<String> = []
         for intent in Intent.allCases {
-            let mark = images[intent.rawValue] ?? ""
-            #expect(mark.hasPrefix("data:image/png;base64,"), "no mark for \(intent.rawValue)")
-            #expect(mark.count > 200, "mark for \(intent.rawValue) is empty")
-            let resolved = images["\(intent.rawValue):resolved"] ?? ""
-            #expect(resolved.hasPrefix("data:image/png;base64,"))
+            for state in ["", ":current", ":resolved", ":pending"] {
+                let key = intent.rawValue + state
+                let image = images[key] ?? ""
+                #expect(image.hasPrefix("data:image/png;base64,"), "no image for \(key)")
+                #expect(image.count > 200, "image for \(key) is empty")
+                seen.insert(image)
+            }
         }
-        #expect((images["pending"] ?? "").hasPrefix("data:image/png;base64,"))
+        // Six intents by four states, and no two of them the same picture. A per-intent
+        // key that quietly returned the same image for all of them would satisfy every
+        // check above and none of the point.
+        #expect(seen.count == Intent.allCases.count * 4)
     }
 
     @Test func theSymbolNamesResolve() {

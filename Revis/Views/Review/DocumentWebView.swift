@@ -46,6 +46,9 @@ struct DocumentWebView: NSViewRepresentable {
     /// The page reporting the zoom it settled on, and what "fit" currently means.
     var onZoom: ((Double) -> Void)?
     var onFit: ((Double) -> Void)?
+    /// The width change a pane toggle is about to cause, as new-over-current.
+    var prefitRatio: Double = 0
+    var prefitToken: Int = 0
     /// A region drag finished. It carries a complete anchor, so there is nothing to ask
     /// for afterwards.
     var onRegion: ((Anchor) -> Void)?
@@ -122,6 +125,13 @@ struct DocumentWebView: NSViewRepresentable {
             c.run("window.rvSelect && window.rvSelect(\(jsQuoted(currentMark)));"
                 + "window.rvSetAnnotations && window.rvSetAnnotations(\(jsQuoted(annotations)));")
         }
+        if c.lastPrefitToken != prefitToken, prefitRatio > 0 {
+            c.lastPrefitToken = prefitToken
+            // Held for a beat longer than the pane takes, so the last stragglers of the
+            // resize stream do not walk the page back through the widths it just skipped.
+            let hold = Int((Motion.panel.duration * 1000).rounded()) + 80
+            c.run("window.rvPrefit && window.rvPrefit(\(prefitRatio), \(hold));")
+        }
         if c.lastZoomToken != zoomToken {
             c.lastZoomToken = zoomToken
             c.pendingZoom = requestedZoom
@@ -158,6 +168,7 @@ struct DocumentWebView: NSViewRepresentable {
         var lastTool: ReviewTool?
         var lastCaptureToken = 0
         var lastZoomToken = 0
+        var lastPrefitToken = 0
         var pendingZoom: Double = 0
         var lastRevealToken = 0
         var lastRevealBlockToken = 0

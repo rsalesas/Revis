@@ -57,6 +57,7 @@
   var zoom = 1;            // the page's own zoom, divided back out of the margin furniture
   var fitting = true;      // whether the zoom is being kept at whatever fits the window
   var reported = -1;       // the last zoom the app was told about
+  var holdUntil = 0;       // resize refits are held off until this moment — see `rvPrefit`
   var selectedID = "";
   var tool = "select";
   var ranges = {};         // annotation id -> Range, for hit-testing a click
@@ -514,6 +515,37 @@
     return Math.max(0, el.clientWidth - left - right);
   }
 
+  /* The app says the viewport is ABOUT to change, and by how much.
+   *
+   * `ratio` is the width the document pane is going to have over the width it has now — a
+   * fraction rather than a number of points, because the page's own units are not the
+   * app's and the conversion between them is not one the app can be sure of.
+   *
+   * This exists because discovering the new width is too late. A pane animating open
+   * resizes the web view over a quarter of a second, and until the page has re-laid-out at
+   * each new width its sheet is still the old, wider one — hanging under the pane sliding
+   * over it, or off the edge of the window. Refitting per frame narrows that gap but
+   * cannot close it: the page is always answering the width before last.
+   *
+   * Told in advance, the sheet is the right size from the first frame and the panes move
+   * around something that is already correct. Vaelora gets this for nothing, because
+   * SwiftUI hands its preview the final width immediately; this layout re-runs per frame,
+   * so it has to be said out loud. Resize-driven refits are held off for the length of the
+   * animation afterwards, or they would walk the page back through every intermediate
+   * width we just skipped. */
+  window.rvPrefit = function (ratio, holdMs) {
+    var page = document.getElementById("rv-page");
+    if (!page || !(ratio > 0) || !fitting) return;
+    var natural = page.offsetWidth;
+    var target = contentWidth(page.parentElement || document.body) * ratio;
+    if (!natural || !target) return;
+    var z = Math.max(0.35, Math.min(3, (target - 1) / natural));
+    page.style.zoom = z;
+    zoom = z;
+    holdUntil = Date.now() + (holdMs > 0 ? holdMs : 0);
+    requestAnimationFrame(paint);
+  };
+
   window.rvSetTool = function (name) {
     tool = name === "region" ? "region" : "select";
     document.documentElement.setAttribute("data-rv-tool", tool);
@@ -738,13 +770,16 @@
 
       var mark = document.createElement("div");
       mark.className = "rv-marker"
-        + (a.id === selectedID ? " current" : "")
         + (a.id === "draft" ? " pending" : "");
       mark.style.width = slotW + "px";
       mark.style.height = slotH + "px";
-      mark.style.backgroundSize = (MARK / zoom) + "px";
-      mark.style.backgroundImage = imageFor(a);
-      mark.style.setProperty("--rv-colour", colours[a.intent] || "#9a9a9e");
+      // The draft is never drawn as the chosen one. It is the only thing being worked on,
+      // the pane has the keyboard, and a ring round it on top of its own unfilled circle
+      // is two rings saying one thing.
+      var current = a.id !== "draft" && a.id === selectedID;
+      mark.style.backgroundSize =
+        (MARK / (current ? DISC_FRACTION : 1) / zoom) + "px";
+      mark.style.backgroundImage = imageFor(a, current);
       mark.style.left = ((index % SLOT_COLS) * slotW) + "px";
       mark.style.top = (top - slotH / 2
                         + Math.floor(index / SLOT_COLS) * slotH) + "px";
@@ -778,11 +813,20 @@
 
   /* Which image a mark wears. Asked for by name rather than assembled here, because the
      app owns what an intent looks like and the page is not allowed a second opinion. */
-  function imageFor(a) {
-    var key = a.id === "draft" ? "pending"
-            : (a.status === "resolved" ? a.intent + ":resolved" : a.intent);
+  function imageFor(a, current) {
+    var key;
+    if (a.id === "draft") key = a.intent + ":pending";
+    else if (a.status === "resolved") key = a.intent + ":resolved";
+    else key = a.intent + (current ? ":current" : "");
     return images[key] ? "url(\"" + images[key] + "\")" : "none";
   }
+
+  /* How big to draw a mark so its DISC is always MARK points across.
+   *
+   * A chosen mark's image carries its ring, so the disc is only part of the picture and
+   * the picture has to be drawn larger to keep the disc the same size. Without this,
+   * choosing a mark would appear to shrink it. */
+  var DISC_FRACTION = 0.70;
 
   // ----------------------------------------------------------------- picking
 
@@ -874,6 +918,9 @@
     var pending = 0;
     window.addEventListener("resize", function () {
       if (fitting) {
+        // Held off while a pane animation plays out: the size was settled in advance and
+        // re-deriving it from a width that is still moving would undo that.
+        if (Date.now() < holdUntil) { requestAnimationFrame(paint); return; }
         window.rvSetZoom(0);
         return;
       }

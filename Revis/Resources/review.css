@@ -293,12 +293,12 @@ html[data-rv-tool="region"] #rv-sheet {
    drawing anything new on the page. Not a glow: a soft halo at these sizes is a smudge. */
 .rv-marker { border-radius: 50%; }
 .rv-marker:hover { transform: scale(1.12); }
-.rv-marker.current {
-  /* Tight against the mark: half a point of the element's own margin, then a point and a
-     half of page, then the ring. Further out it stopped reading as a ring around THIS
-     thing and started reading as a second circle near it. */
-  box-shadow: 0 0 0 1.5px var(--rv-sheet), 0 0 0 3px var(--rv-colour);
-}
+/* The chosen mark's ring is drawn INTO its image, not added here as a shadow.
+   It was a shadow, and the two would not line up: the element is a fraction of a point
+   wide once the zoom has divided it, the browser centres the background image in that, and
+   the shadow comes off the border box — three roundings, each snapping on its own, so the
+   ring sat up and to the left of the mark inside it. One image cannot be off-centre from
+   itself. See `AnnotationSymbols.composed`. */
 
 /* A mark being written, standing in the slot its mark will take. Not a target — the pane
    has the keyboard, and the only two ways out of a draft are to write it or abandon it. */

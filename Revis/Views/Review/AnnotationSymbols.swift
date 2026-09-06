@@ -21,7 +21,13 @@ enum AnnotationSymbols {
     /// the review records that it was answered, but it must not read as outstanding.
     static let hollow = "circle"
     /// An annotation being written but not yet in the review.
-    static let pending = "circle"
+    ///
+    /// DASHED, where a settled one is a plain ring. They were the same circle — same
+    /// symbol, same weight, same colour — so a mark being written and one that had been
+    /// dealt with were the same picture, and the margin could not tell you which it was
+    /// looking at. A broken outline is the conventional way to draw something provisional
+    /// and it costs nothing to say.
+    static let pending = "circle.dashed"
 
     /// The two colours a hollow mark is drawn in.
     static func palette(for hex: String) -> [NSColor] {
@@ -124,6 +130,11 @@ enum AnnotationSymbols {
         return url
     }
 
+    /// How much of a ringed mark's canvas the disc occupies. The rest is the gap and the
+    /// ring. The page divides by this to draw a ringed mark at a size that keeps its DISC
+    /// the same as an unringed one — otherwise choosing a mark would appear to shrink it.
+    static let discFraction: CGFloat = 0.70
+
     /// A mark: the intent's own glyph, in white, on a disc of the intent's colour.
     ///
     /// **Why not one shape for all of them, as Vaelora has.** There, a mark's colour says
@@ -131,33 +142,45 @@ enum AnnotationSymbols {
     /// is the whole vocabulary. Here the colour says WHAT is being asked, and what is being
     /// asked already has a glyph: the one on the row in the pane, and the one on the button
     /// in the toolbar. Leaving the margin as plain coloured dots meant the only thing tying
-    /// a mark to its card was a colour you had to have learned, and the honest reaction to
-    /// that is "why are these different colours?" — which is exactly the question it drew.
-    /// Carrying the same glyph answers it without anybody having to be told.
+    /// a mark to its card was a colour you had to have learned.
     ///
     /// White on a filled disc rather than the glyph alone, because a fifteen-point
-    /// `arrow.up.arrow.down` in a thin stroke is a smudge on paper. A disc reads at that
-    /// size, and the glyph on it reads because it has a solid ground behind it.
+    /// `arrow.up.arrow.down` in a thin stroke is a smudge on paper.
     @MainActor
-    private static func mark(_ intent: Intent) -> String {
+    private static func mark(_ intent: Intent, ringed: Bool) -> String {
         let hex = AnnotationPalette.hex(for: intent)
-        let key = "m\(intent.rawValue)\(hex)"
+        let key = "m\(intent.rawValue)\(hex)\(ringed ? "-ring" : "")"
         if let hit = cache[key] { return hit }
-        let url = composed(glyph: intent.symbol, on: NSColor(hex: hex)) ?? ""
+        let url = composed(glyph: intent.symbol, on: NSColor(hex: hex), ringed: ringed) ?? ""
         cache[key] = url
         return url
     }
 
-    /// The glyph drawn over the disc, both rasterised well above the size they are shown
-    /// at and composited as ONE image — so what the page scales down is a single picture
-    /// and cannot come apart at fractional pixel sizes.
-    static func composed(glyph: String, on colour: NSColor, side: CGFloat = 88) -> String? {
-        guard let disc = symbolImage(disc, palette: [colour], side: side, weight: .regular),
-              let mark = symbolImage(glyph, palette: [.white], side: side * 0.46,
+    /// The disc, the glyph and — for the chosen mark — the ring around it, rasterised
+    /// well above the size they are shown at and composited as ONE image.
+    ///
+    /// **The ring is part of the picture, not a `box-shadow` on the element.** It was a
+    /// shadow, and the two would not line up: the element is a fraction of a point wide
+    /// once the page's zoom has divided it, the background image is centred in it by the
+    /// browser, and the shadow is drawn from the border box — three roundings, each
+    /// snapping on its own, so the ring sat up and to the left of the mark inside it. That
+    /// is the same failure as building the mark out of CSS boxes, one layer out. One
+    /// image cannot be off-centre from itself.
+    static func composed(glyph: String, on colour: NSColor, ringed: Bool,
+                         side: CGFloat = 88) -> String? {
+        let discSide = ringed ? side * discFraction : side
+        guard let disc = symbolImage(disc, palette: [colour], side: discSide,
+                                     weight: .regular),
+              let mark = symbolImage(glyph, palette: [.white], side: discSide * 0.46,
                                      weight: .bold)
         else { return nil }
+        // The ring is the same circle stroked, at the full canvas, so its centre IS the
+        // canvas centre and so is the disc's.
+        let ring = ringed ? symbolImage(hollow, palette: [colour], side: side,
+                                        weight: .semibold) : nil
 
-        let canvas = max(disc.size.width, disc.size.height).rounded(.up)
+        let canvas = max(ring?.size.width ?? disc.size.width,
+                         ring?.size.height ?? disc.size.height).rounded(.up)
         guard canvas > 0,
               let rep = NSBitmapImageRep(
                 bitmapDataPlanes: nil, pixelsWide: Int(canvas * 2), pixelsHigh: Int(canvas * 2),
@@ -168,12 +191,14 @@ enum AnnotationSymbols {
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        disc.draw(in: NSRect(x: (canvas - disc.size.width) / 2,
-                             y: (canvas - disc.size.height) / 2,
-                             width: disc.size.width, height: disc.size.height))
-        mark.draw(in: NSRect(x: (canvas - mark.size.width) / 2,
-                             y: (canvas - mark.size.height) / 2,
-                             width: mark.size.width, height: mark.size.height))
+        func centre(_ image: NSImage) {
+            image.draw(in: NSRect(x: (canvas - image.size.width) / 2,
+                                  y: (canvas - image.size.height) / 2,
+                                  width: image.size.width, height: image.size.height))
+        }
+        if let ring { centre(ring) }
+        centre(disc)
+        centre(mark)
         NSGraphicsContext.restoreGraphicsState()
 
         guard let squared = squaredToInk(rep),
@@ -191,9 +216,7 @@ enum AnnotationSymbols {
         return image
     }
 
-    /// Every image the page needs, keyed the way the runtime asks for them: the intent's
-    /// name for an open mark, `intent:resolved` for a settled one, and `pending` for one
-    /// being written.
+    /// Every image the page needs, keyed the way the runtime asks for them.
     ///
     /// Built here rather than in JavaScript for the reason everything shared is: one
     /// source, two readers. The pane's row and the margin's mark are drawn by different
@@ -203,14 +226,18 @@ enum AnnotationSymbols {
         var out: [String: String] = [:]
         for intent in Intent.allCases {
             let hex = AnnotationPalette.hex(for: intent)
-            out[intent.rawValue] = mark(intent)
-            // Hollow, and drawn bold: a plain ring at fifteen points is a hairline and
+            out[intent.rawValue] = mark(intent, ringed: false)
+            out["\(intent.rawValue):current"] = mark(intent, ringed: true)
+            // Hollow, and drawn bold: a plain ring at nineteen points is a hairline and
             // reads as a smudge rather than as a mark.
             out["\(intent.rawValue):resolved"] = cached(
                 hollow, palette: [NSColor(hex: hex)], key: "r\(hex)", weight: .bold)
+            // A mark being written, in the colour the annotation will BE. It was always
+            // amber — the colour of Change — whatever kind was being written, so a draft
+            // announced itself as the wrong thing until the moment it was added.
+            out["\(intent.rawValue):pending"] = cached(
+                pending, palette: [NSColor(hex: hex)], key: "p\(hex)", weight: .bold)
         }
-        out["pending"] = cached(pending, palette: [NSColor(hex: AnnotationPalette.hex(for: .change))],
-                                key: "p", weight: .bold)
         return out
     }
 

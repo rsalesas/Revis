@@ -27,11 +27,14 @@ struct ReviewView: View {
         .navigationTitle(model.displayName)
         .navigationSubtitle(subtitle)
         .toolbar { toolbar }
+        // Told BEFORE the animation, not discovered during it. See `ReviewModel.prefit`.
         .onChange(of: model.annotationsVisible) { _, visible in
             appSettings.lastAnnotationsVisible = visible   // not @Published, so no re-render
+            model.prefit(by: visible ? -Self.annotationsWidth : Self.annotationsWidth)
         }
         .onChange(of: model.inspectorVisible) { _, visible in
             appSettings.lastInspectorVisible = visible
+            model.prefit(by: visible ? -Self.inspectorWidth : Self.inspectorWidth)
         }
         .sheet(item: $export) { ExportSheet(preview: $0) }
         .onReceive(NotificationCenter.default.publisher(for: .revisShowExport)) { note in
@@ -41,6 +44,11 @@ struct ReviewView: View {
                                    suggestedName: model.exportBaseName)
         }
     }
+
+    /// The pane widths, named once: the layout uses them and `prefit` has to say the same
+    /// numbers, and two copies of a width is two chances to say different ones.
+    static let inspectorWidth: CGFloat = 260
+    static let annotationsWidth: CGFloat = 300
 
     @ViewBuilder private var content: some View {
         if model.isEmpty {
@@ -58,8 +66,10 @@ struct ReviewView: View {
             // Nested with the inspector OUTERMOST: opening the annotations then takes width
             // from the document and leaves the outline where it is, which is what you want
             // when the outline is the thing you were reading down.
-            CollapsibleSidePane(edge: .leading, isOpen: model.inspectorVisible, width: 260) {
-                CollapsibleSidePane(isOpen: model.annotationsVisible, width: 300) {
+            CollapsibleSidePane(edge: .leading, isOpen: model.inspectorVisible,
+                                width: Self.inspectorWidth) {
+                CollapsibleSidePane(isOpen: model.annotationsVisible,
+                                    width: Self.annotationsWidth) {
                     document
                 } pane: {
                     AnnotationsPane(model: model)
@@ -123,10 +133,18 @@ struct ReviewView: View {
             onAnchor: { model.receive(anchor: $0) },
             onZoom: { model.receive(zoom: $0) },
             onFit: { model.receive(fit: $0) },
+            prefitRatio: model.prefitRatio,
+            prefitToken: model.prefitToken,
             // No intent passed: the model knows the default. Handing it in here was how
             // the two paths came to disagree.
             onRegion: { model.openDraft(on: $0) })
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // What `prefit` measures the change against. Read rather than assumed: the pane is
+        // whatever the window has left after the sidebars, which is not a number the view
+        // otherwise knows.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: {
+            model.documentWidth = $0
+        }
     }
 
     // MARK: - Toolbar
