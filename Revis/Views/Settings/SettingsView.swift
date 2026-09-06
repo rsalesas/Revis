@@ -55,7 +55,7 @@ private struct GeneralSettingsTab: View {
                 Picker("Documents open at", selection: $appSettings.defaultZoom) {
                     Text("Fit width").tag(0.0)
                     Divider()
-                    ForEach(ReviewModel.zoomStops, id: \.self) { stop in
+                    ForEach(ReviewModel.zoomPresets, id: \.self) { stop in
                         Text("\(Int((stop * 100).rounded()))%").tag(stop)
                     }
                 }

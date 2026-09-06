@@ -55,6 +55,7 @@
   var colours = {};        // intent -> colour, assigned by the app
   var images = {};         // intent (and "…:resolved", "pending") -> the mark, as a data URL
   var zoom = 1;            // the page's own zoom, divided back out of the margin furniture
+  var fitting = true;      // whether the zoom is being kept at whatever fits the window
   var selectedID = "";
   var tool = "select";
   var ranges = {};         // annotation id -> Range, for hit-testing a click
@@ -385,7 +386,11 @@
   window.rvSetZoom = function (value) {
     var page = document.getElementById("rv-page");
     if (!page) return 1;
-    var z = (typeof value === "number" && value > 0) ? value : fitZoom();
+    /* Zero means "fit", and fitting is a MODE rather than a measurement taken once: the
+       window is resized far more often than the zoom is set, and a page that fitted when
+       it opened and not afterwards is a page that stops fitting exactly when you notice. */
+    fitting = !(typeof value === "number" && value > 0);
+    var z = fitting ? fitZoom() : value;
     z = Math.max(0.35, Math.min(3, z));
     page.style.zoom = z;
     zoom = z;
@@ -395,22 +400,32 @@
     requestAnimationFrame(function () {
       paint();
       post("zoom", { value: z });
+      post("fit", { value: fitting ? z : fitZoom() });
     });
     return z;
   };
 
-  /* The zoom at which the sheet just fills the window.
+  /* The zoom at which the sheet just fills the space it has.
    *
-   * Read off the sheet's own natural width rather than hard-coded from the stylesheet:
-   * `#rv-page` has a max-width, and a narrow window is already below it, in which case
-   * fitting means 100% and not "stretch it". */
+   * Worked out as a RATIO against the zoom already in force, not as an absolute. The
+   * absolute form divided the available width by the sheet's *rendered* width — but the
+   * sheet is already rendered at the current zoom, so at 119% it reported that fitting
+   * meant 100%, and Fit shrank the page instead of fitting it. Fit was only ever correct
+   * from exactly 100%.
+   *
+   * Measured against the sheet's PARENT rather than the viewport, so the breathing room
+   * is the body's padding and nothing has to guess at it — which is what keeps the gap at
+   * the sides equal to the gap at the top. Subtracting a made-up allowance here is what
+   * made them differ. */
   function fitZoom() {
     var page = document.getElementById("rv-page");
     if (!page) return 1;
-    var available = document.documentElement.clientWidth;
-    var natural = page.offsetWidth * (parseFloat(page.style.zoom) || 1);
-    if (!natural) return 1;
-    return Math.max(0.35, Math.min(3, (available - 24) / natural));
+    var current = parseFloat(page.style.zoom) || 1;
+    var host = page.parentElement || document.body;
+    var available = host.clientWidth;
+    var rendered = page.getBoundingClientRect().width;
+    if (!available || !rendered) return current;
+    return Math.max(0.35, Math.min(3, current * (available / rendered)));
   }
 
   window.rvSetTool = function (name) {
@@ -673,10 +688,14 @@
     window.addEventListener("resize", function () {
       clearTimeout(pending);
       pending = setTimeout(function () {
-        paint();
-        // What "fit" would mean at the new size, so the status bar's Fit control acts on
-        // the window as it is rather than as it was when the document loaded.
-        post("fit", { value: fitZoom() });
+        // Re-fit FIRST if that is the mode, because fitting reflows the page and the marks
+        // are positioned from where the blocks end up.
+        if (fitting) {
+          window.rvSetZoom(0);
+        } else {
+          paint();
+          post("fit", { value: fitZoom() });
+        }
       }, 80);
     });
   }

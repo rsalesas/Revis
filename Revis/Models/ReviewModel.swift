@@ -75,6 +75,12 @@ final class ReviewModel: ObservableObject {
     @Published private(set) var zoom: Double = 1
     /// What "fit the window" currently means, kept up to date as the window is resized.
     @Published private(set) var fitZoom: Double = 1
+    /// Whether the page is being kept fitted to the window, rather than held at a size.
+    ///
+    /// A MODE, as it is in Vaelora, not a one-off measurement. Fitting once and then
+    /// forgetting means the page stops fitting the moment the window is resized — which is
+    /// the moment you most want it to. Any explicit zoom leaves the mode.
+    @Published private(set) var toFit = true
     /// The zoom to apply; zero asks the page to fit. Pushed on the token changing so the
     /// same value can be asked for twice.
     @Published private(set) var requestedZoom: Double = 0
@@ -141,37 +147,60 @@ final class ReviewModel: ObservableObject {
 
     // MARK: - Zoom
 
-    /// The steps the -/+ buttons walk. Not a percentage added or multiplied: an even
-    /// multiplier gives silly numbers (137%) and an even step is too coarse at the bottom
-    /// and too fine at the top. These are the ones a document viewer conventionally offers.
-    static let zoomStops: [Double] = [0.5, 0.67, 0.75, 0.85, 1.0, 1.15, 1.25, 1.5, 1.75, 2.0]
+    /// A tenth at a time, the way Vaelora does it.
+    ///
+    /// A table of stops was tried first and is worse for one specific reason: from a fit
+    /// zoom, which is whatever number the window happens to produce, the first press lands
+    /// on the nearest stop rather than moving by a step — so the same button moved the page
+    /// by 6% once and 25% the next time. A fixed step always does the same thing.
+    static let step = 0.1
 
+    /// The sizes offered outright, in the status bar's menu and in Settings.
+    static let zoomPresets: [Double] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+
+    /// Set an explicit zoom; leaves fit mode.
+    ///
+    /// Rounded to whole percentage points, which matters more than it looks: a fit zoom is
+    /// 1.1904…, and stepping that by a tenth without rounding gives 129%, then 139%. Two
+    /// decimal places is what keeps the readout showing the round numbers a person expects
+    /// to walk through.
     func setZoom(_ value: Double) {
-        requestedZoom = max(0.35, min(3, value))
+        toFit = false
+        requestedZoom = min(3.0, max(0.35, (value * 100).rounded() / 100))
         zoomToken &+= 1
     }
 
-    /// Ask the page what fits and go there. A measurement, not a number the app can work
-    /// out: the answer depends on the document's own width, which only the page knows.
+    /// Keep the page fitted to the window, now and as the window changes.
     func zoomToFit() {
+        toFit = true
         requestedZoom = 0
         zoomToken &+= 1
     }
 
-    func zoomIn() { setZoom(Self.zoomStops.first { $0 > zoom + 0.001 } ?? 3) }
+    /// Stepped from the zoom the page ACTUALLY reports, not from what was last asked for.
+    /// In fit mode nothing was asked for, so stepping from a request would step from zero.
+    func zoomIn() { setZoom(zoom + Self.step) }
 
-    func zoomOut() { setZoom(Self.zoomStops.last { $0 < zoom - 0.001 } ?? 0.35) }
+    func zoomOut() { setZoom(zoom - Self.step) }
 
-    /// The page reporting what it actually did. Kept separate from `requestedZoom` so the
-    /// status bar shows the real percentage after a fit rather than the zero that asked
-    /// for it.
+    /// The page reporting what it actually did.
     func receive(zoom value: Double) { zoom = value }
 
     func receive(fit value: Double) { fitZoom = value }
 
-    /// Whether the current zoom already fits, so the Fit control can say so rather than
-    /// offering to do what has been done.
-    var isFitted: Bool { abs(zoom - fitZoom) < 0.005 }
+    /// What the readout says. "Fit" rather than a percentage while fitted, because the
+    /// number churns on every window resize and is not what the reader is being told.
+    var zoomLabel: String {
+        toFit ? "Fit" : "\(Int((zoom * 100).rounded()))%"
+    }
+
+    /// What the readout should roll on. Held constant in fit mode, where the label reads
+    /// "Fit" and never changes — keying on the zoom would run a transition over text that
+    /// is not moving.
+    var rollingZoom: Double { toFit ? 0 : (zoom * 100).rounded() }
+
+    /// Whether the Fit control would do anything.
+    var isFitted: Bool { toFit }
 
     /// Everything that goes back into the file on save.
     ///

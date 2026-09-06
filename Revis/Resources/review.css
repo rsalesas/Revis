@@ -16,6 +16,9 @@
   --rv-rule: rgba(0, 0, 0, 0.10);
   --rv-shadow: rgba(0, 0, 0, 0.16);
   --rv-gutter-width: 34px;
+  /* The space round the sheet. One number, used by the stylesheet and measured by the
+     runtime, so the top and the sides cannot drift apart. */
+  --rv-gutter: 24px;
   /* Mirrors `Motion.panel` in Swift. The two are the same curve on purpose: a mark
      settling on the page and a pane taking width off it are the same app moving. */
   --rv-motion-panel: cubic-bezier(0.32, 0.72, 0, 1);
@@ -34,15 +37,26 @@
 
 html, body {
   margin: 0;
-  padding: 0;
   background: var(--rv-backdrop);
   -webkit-text-size-adjust: none;
+}
+
+/* The breathing room round the sheet lives HERE, on the unzoomed body, and is equal on
+   three sides.
+   It used to be a margin on `#rv-page` — which the page's own zoom scales, so at 119% the
+   top gap grew to thirty-odd points while the sides were whatever the fit arithmetic had
+   subtracted. Two different numbers arrived at two different ways, which is exactly how a
+   window ends up with a margin at the top and none at the sides. One number, outside the
+   zoom, and `fitZoom` measures against this element's content box so the fit cannot
+   disagree with it. */
+body {
+  padding: var(--rv-gutter) var(--rv-gutter) 96px;
 }
 
 #rv-page {
   position: relative;
   max-width: 920px;
-  margin: 28px auto 96px;
+  margin: 0 auto;
 }
 
 #rv-sheet {

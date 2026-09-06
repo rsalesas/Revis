@@ -21,7 +21,7 @@ struct StatusBar: View {
             zoomControls
         }
         .padding(.horizontal, 12)
-        .frame(height: 26)
+        .frame(height: 30)
         .background(.bar)
         .overlay(alignment: .top) { Rectangle().fill(Theme.hairline).frame(height: 0.5) }
     }
@@ -100,45 +100,53 @@ struct StatusBar: View {
         .disabled(model.isEmpty)
     }
 
+    /// Built the way Vaelora's is, because Vaelora's works and this one did not.
+    ///
+    /// The difference is one line: the glyph gets a frame and a content shape. Without
+    /// them a `Button` wrapping a nine-point `Image` is the size of the ink — the minus
+    /// measured eight points by two — so the control was there, drawn, enabled, and
+    /// essentially impossible to hit. It read as a button that did not work.
     private var zoomControls: some View {
-        HStack(spacing: 2) {
-            Button { model.zoomOut() } label: { Image(systemName: "minus") }
+        HStack(spacing: 0) {
+            zoomButton("minus", "Zoom out") { model.zoomOut() }
                 .disabled(model.zoom <= 0.36)
-            // A menu on the percentage, so the common sizes are one click away and the
-            // buttons do not have to be walked ten times to get from fit to 200%.
             Menu {
                 Button("Fit Width") { model.zoomToFit() }
                 Divider()
-                ForEach(ReviewModel.zoomStops, id: \.self) { stop in
-                    Button(percentage(stop)) { model.setZoom(stop) }
+                ForEach(ReviewModel.zoomPresets, id: \.self) { stop in
+                    Button("\(Int(stop * 100))%") { model.setZoom(stop) }
                 }
             } label: {
-                Text(percentage(model.zoom))
-                    .font(.system(size: 10.5))
-                    .monospacedDigit()
-                    .rollingNumber(model.zoom)
-                    .frame(width: 38)
+                Text(model.zoomLabel)
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .rollingNumber(model.rollingZoom)
+                    .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .fixedSize()
-            Button { model.zoomIn() } label: { Image(systemName: "plus") }
+            .fixedSize()          // hug the text rather than expanding to fill the bar
+            .frame(width: 46)     // …but hold a slot wider than "100%", so nothing shifts
+            .help("Zoom")
+            zoomButton("plus", "Zoom in") { model.zoomIn() }
                 .disabled(model.zoom >= 2.99)
-            Button { model.zoomToFit() } label: {
-                Image(systemName: "arrow.left.and.right")
-            }
-            .help("Fit the page to the window")
-            // Not hidden when it would do nothing — a control that vanishes as you reach
-            // the state it produces reads as the window losing a button.
-            .disabled(model.isFitted)
         }
-        .font(.system(size: 9, weight: .semibold))
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
+        .background(Color.primary.opacity(0.06), in: Capsule())
         .disabled(model.isEmpty)
     }
 
-    private func percentage(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
+    private func zoomButton(_ symbol: String, _ help: String,
+                            _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .bold))
+                // The whole point. A frame the pointer can find, and a content shape so
+                // the transparent parts of it are hittable too.
+                .frame(width: 26, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help(help)
     }
+
 }
