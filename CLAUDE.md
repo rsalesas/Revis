@@ -66,34 +66,35 @@ happens again:
 `run()` in `DocumentWebView` reports evaluation failures rather than swallowing them. Do
 not put that `try?` back.
 
-## The pane-toggle flash (open, and expensive to chase)
+## The pane toggle (settled, after a great many wrong turns)
 
-Toggling a side pane shows a brief flash at the document's trailing edge. Several things
-that looked like the cause were not, and each is now fixed on its own merits — do not undo
-them while trying something new:
+Toggling a side pane animates the slot's width, and the document follows it — the plain
+thing, which is where this started. It only works because of one change made much later:
 
-- **The layout must not animate.** A toggle is wrapped in `withAnimation`, and that
-  animation reaches every view in the update, including a hosted `NSView`, which then
-  animates its layer through Core Animation. Measured: twelve intermediate widths over
-  200 ms for one toggle, each a full WebKit re-layout. `paneContent()` strips it.
-- **The panes are three siblings in one row**, not nested containers. Vaelora nests
-  because its layout animates and the nesting decides whose width each animation comes
-  from; that reason does not apply once the layout is instant.
-- **The sheet fills by layout while fitting** (`width: auto`), not by a `zoom` that
-  JavaScript has to set. Anything script-driven arrives a process and a resize event
-  later — around 30-35 ms, measured — and for those frames the sheet is sized for the
-  width before last: wider than the view, so clipped, with text running under the pane.
-- **Do not put a transition on the zoom.** Vaelora eases its page because a page is fixed
-  paper that need not fill anything; this sheet must exactly fill the viewport, so a late
-  zoom is a clipped sheet. `BridgeTests` pins the transition gone.
+- **The fitted sheet fills by LAYOUT** (`body.rv-fitting #rv-page { width: auto }`), not by
+  a `zoom` that JavaScript sets. That is the whole of it. Script-driven sizing arrives a
+  process and a resize event later — 30-35 ms, measured — so on every frame of an animating
+  width the sheet was sized for the width before last: wider than the view, clipped, text
+  running under the pane. Filling by layout happens in the reflow WebKit already performs,
+  with nothing to wait for and nobody to tell.
 
-What remains is the WebKit round trip itself: the view is resized in one step and the page
-reports its new layout roughly two frames later. The only thing that would remove it is not
-resizing the web view on a toggle at all — panes overlaying the document rather than taking
-width from it — which costs the thing the panes exist for, reading a note beside the passage
-it is about. Measure before changing anything here: `REVIS_PAGE_LOG` plus an
-`onGeometryChange` on the document pane gives both sides of the change with timestamps, and
-that is what settled every question above.
+Three shapes were tried before that and each was worse; do not reach for them again:
+
+- Snapping the slot and sliding only its CONTENT leaves the slot standing open and empty
+  for a quarter of a second. An empty hole is more obviously wrong than a lagging document.
+- Not animating at all removes the hole and the lag, and the one cue saying where the pane
+  came from.
+- Easing the page's zoom to match the pane makes it worse still: this sheet must exactly
+  fill the viewport, so a late zoom IS a clipped sheet. Vaelora can ease its page because a
+  page is fixed paper that need not fill anything. `BridgeTests` pins the transition gone.
+
+Two things the document keeps and must not lose: its own layer clipped
+(`layer.masksToBounds`, since SwiftUI's clip masks only what SwiftUI draws), and no
+separate animation from the pane — they are two halves of one width.
+
+Measure before changing any of this. `REVIS_PAGE_LOG` plus an `onGeometryChange` on the
+document pane gives both sides of a toggle with timestamps, and that is what settled every
+question here. Guessing cost far more than measuring did, every single time.
 
 ## Testing
 

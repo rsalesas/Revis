@@ -20,14 +20,26 @@ import SwiftUI
 /// corrects itself a frame later, which shows as soon as opening takes a quarter of a
 /// second.
 ///
-/// **The slot changes size instantly; the content slides into it.** This is the whole of
-/// what took so long to find. Dragging the window edge never puts the document under a
-/// pane and resizes beautifully; toggling a pane did both. The difference is not the web
-/// view — on a drag the pane's width is CONSTANT and only the document's changes, while on
-/// a toggle the pane's width was animating too, so the layout was being re-solved sixty
-/// times against a width that kept moving. Now the slot goes to its final width in one
-/// step, which is exactly what a window drag does, and the content slides in from outside
-/// on the panel token, clipped to the slot. What moves is a picture, not a layout.
+/// **The slot animates its width, and everything follows it.**
+///
+/// This is where it started and where it ends up, but it only works now that the page
+/// inside the document fills its container by LAYOUT rather than by a zoom that script has
+/// to set (see `body.rv-fitting` in review.css). Before that, animating the width meant
+/// asking the page to re-fit itself on every frame through a round trip to another
+/// process, and it was always a frame or two behind — which is what put the document under
+/// the pane beside it.
+///
+/// Two other shapes were tried and are worse:
+///
+/// - Snapping the slot and sliding the CONTENT into it leaves the slot standing open and
+///   empty for a quarter of a second. An empty hole is more obviously wrong than anything
+///   it was meant to fix.
+/// - Not animating at all removes the hole and the lag, and also removes the one thing
+///   that tells you where the pane came from.
+///
+/// The animation comes from whatever calls the toggle, so it reaches the slot and the
+/// document together. They are two halves of one width and must not be given separate
+/// timing.
 struct CollapsiblePane<Content: View>: View {
     /// Which side of the row this sits on. The anchoring is mirrored for each, and the
     /// mirroring is the whole of the difference.
@@ -35,8 +47,6 @@ struct CollapsiblePane<Content: View>: View {
     let isOpen: Bool
     let width: CGFloat
     @ViewBuilder var content: Content
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static var dividerWidth: CGFloat { 0.5 }
     private var slot: CGFloat { width + Self.dividerWidth }
@@ -49,32 +59,29 @@ struct CollapsiblePane<Content: View>: View {
             content.frame(width: width)
             if edge == .leading { PaneDivider() }
         }
-        // Closed, the content sits wholly outside the slot, on the side it comes from.
-        .offset(x: isOpen ? 0 : (edge == .leading ? -slot : slot))
-        // On the offset ALONE. Applied here, below the frame, so it animates the slide and
-        // not the size of the slot the slide happens inside.
-        .animation(reduceMotion ? nil : Motion.panel.animation, value: isOpen)
+        // Anchored to the edge the pane comes FROM, so it slides rather than being
+        // uncovered: at nought width the content sits wholly outside the frame on that
+        // side, and the clip hides it there.
         .frame(width: isOpen ? slot : 0,
                alignment: edge == .leading ? .trailing : .leading)
         .clipped()
     }
 }
 
-/// The main content of a row of panes: sized instantly, and clipped.
+/// The main content of a row of panes: clipped to its own bounds.
 ///
-/// **Instantly**, because the layout is not what should be moving. A toggle is wrapped in
-/// `withAnimation` by whatever calls it, and that animation reaches every view in the
-/// update — including a hosted `NSView`, which then animates its layer to the new width
-/// through Core Animation and spends a fifth of a second at sizes nobody asked for.
-/// Measured, that was twelve intermediate widths over two hundred milliseconds for one
-/// toggle, each one a full document re-layout in WebKit.
+/// `NSView`s are real views. SwiftUI's `.clipped()` masks what SwiftUI draws, and a hosted
+/// view's layer needs telling separately — so while the width is animating, a web view
+/// mid-resize can otherwise present a layer larger than the frame it was given and paint
+/// over the pane beside it.
 ///
-/// **Clipped**, because `NSView`s are real views: SwiftUI's own clip masks what SwiftUI
-/// draws, and a hosted view's layer needs telling separately.
+/// It used to strip the ambient animation as well, so its width changed in one step while
+/// the pane slid. That was necessary while the page had to re-fit itself by script and
+/// could not keep up; it is not necessary now that the page fills by layout, and it was
+/// never desirable — the document and the pane are two halves of one width, and giving
+/// them separate timing is exactly what made them disagree.
 extension View {
     func paneContent() -> some View {
-        self
-            .transaction { $0.animation = nil }
-            .clipped()
+        clipped()
     }
 }
