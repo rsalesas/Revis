@@ -442,8 +442,15 @@
        window is resized far more often than the zoom is set, and a page that fitted when
        it opened and not afterwards is a page that stops fitting exactly when you notice. */
     fitting = !(typeof value === "number" && value > 0);
-    var z = fitting ? fitZoom() : value;
-    z = Math.max(0.35, Math.min(3, z));
+    /* Fitting does not use the zoom at all. The sheet fills its container by layout (see
+       `body.rv-fitting` in review.css), which is the only way for it to change size in the
+       same pass as the container — anything script has to set arrives a process and a
+       resize event later, and for those frames the sheet is the wrong size and gets
+       clipped. So: zoom 1, and let the page be a page.
+       The number REPORTED is still the effective scale — how big the sheet is against its
+       nominal measure — so the readout means something and stepping out of Fit with + or −
+       carries on from where the eye is rather than jumping. */
+    var z = fitting ? 1 : Math.max(0.35, Math.min(3, value));
     /* An explicit zoom is a step, not a chase: pressing + should change the size rather
        than animate toward it. Only a fit follows something and wants easing. */
     var root = document.documentElement;
@@ -461,10 +468,11 @@
          frame, and telling the app about each one is a message a frame for a status bar
          that reads "Fit" throughout. A tenth of a percent is below what the readout can
          show. */
-      if (Math.abs(z - reported) > 0.001) {
-        reported = z;
-        post("zoom", { value: z });
-        post("fit", { value: fitting ? z : fitZoom() });
+      var effective = fitting ? fitZoom() : z;
+      if (Math.abs(effective - reported) > 0.001) {
+        reported = effective;
+        post("zoom", { value: effective });
+        post("fit", { value: fitZoom() });
       }
     });
     return z;
@@ -485,8 +493,10 @@
   function fitZoom() {
     var page = document.getElementById("rv-page");
     if (!page) return 1;
-    var natural = page.offsetWidth;
     var available = contentWidth(page.parentElement || document.body);
+    // The nominal measure, not the current one: while fitting the sheet's own width IS the
+    // available width, and dividing a thing by itself always says 100%.
+    var natural = NOMINAL;
     if (!available || !natural) return parseFloat(page.style.zoom) || 1;
     /* A pixel short of exact, and deliberately.
      *
@@ -688,6 +698,9 @@
      is part of it — so the element clipped its own ring off and the chosen state became
      invisible. The box is the ringed size; the unringed mark simply sits in the middle of
      it with room to spare, which is no bad thing for something you press. */
+  /* The sheet's nominal measure, matching `#rv-page { width: 920px }` in review.css. */
+  var NOMINAL = 920;
+
   var SLOT_W = 30;         // painted; the box a mark lives in
   var SLOT_H = 30;
   var MARK = 19;           // painted; the mark drawn inside it

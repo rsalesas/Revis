@@ -101,17 +101,32 @@ html[data-rv-zooming] #rv-page { transition: none; }
    Below it there is nothing to scroll. */
 body { overflow-x: auto; }
 
-/* While FITTING, the sheet can never be drawn wider than the room it has.
-   It is exactly that wide anyway, so this does nothing at rest. It does something for the
-   frame or two after the pane starts moving and before the page has re-laid-out at the new
-   width: without it the sheet is briefly the old, wider one.
-
-   Plain `100%`, and NOT divided by the zoom. A percentage inside a zoomed element already
-   resolves against the containing block in that element's own coordinate space — the zoom
-   is accounted for once, by the engine. Dividing again applied it twice and squeezed the
-   sheet to a column one letter wide, which is what trying to correct for something that
-   was never wrong looks like. */
-body.rv-fitting #rv-page { max-width: 100%; }
+/* WHILE FITTING, the sheet's width is LAYOUT, not script.
+ *
+ * This is the fix for the whole class of problem, and the diagram is the argument: every
+ * other box in the window gets its width from the layout, in the same pass as the change
+ * that caused it. The dark body follows the web view instantly because it IS the web view.
+ * The white sheet did not, because its width was 920 points scaled by a `zoom` that only
+ * JavaScript could set — and JavaScript runs in another process, a resize event later,
+ * measured at thirty-odd milliseconds. For those two frames the sheet was still sized for
+ * the width before last: wider than the view holding it, and therefore clipped, with the
+ * heading running under the pane.
+ *
+ * Fitting means filling, and filling is what `width: auto` does — in the same reflow
+ * WebKit already performs for the viewport change, with nothing to wait for. There is no
+ * moment at which the sheet is the wrong size, because there is no moment at which anyone
+ * has to be told the size.
+ *
+ * The measure is capped inside the sheet instead, so a wide window gives a wide sheet and
+ * still-readable lines rather than one very long line. */
+body.rv-fitting #rv-page {
+  width: auto;
+  max-width: none;
+}
+body.rv-fitting #rv-doc > * { max-width: 46em; }
+body.rv-fitting #rv-doc > table,
+body.rv-fitting #rv-doc > figure,
+body.rv-fitting #rv-doc > pre { max-width: none; }
 
 #rv-sheet {
   position: relative;
