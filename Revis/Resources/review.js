@@ -515,36 +515,6 @@
     return Math.max(0, el.clientWidth - left - right);
   }
 
-  /* The app says the viewport is ABOUT to change, and by how much.
-   *
-   * `ratio` is the width the document pane is going to have over the width it has now — a
-   * fraction rather than a number of points, because the page's own units are not the
-   * app's.
-   *
-   * This does NOT hold off the refits that follow. It was tried that way — settle the size
-   * up front, then ignore the resize stream for the length of the animation — and it made
-   * things worse in a way that took an outside eye to name: dragging the window edge, where
-   * the page refits on every event, is visibly smoother than toggling a pane, where it
-   * refitted once and then sat still. The reason is that a sheet already at its final width
-   * inside a viewport that is still moving is centred against the wrong thing, so it drifts
-   * sideways for a quarter of a second. Following is smoother than arriving early.
-   *
-   * What the advance notice is still good for is the FIRST frame: the pane's animation is
-   * front-loaded enough that the first resize event lands about half way through, and
-   * without this the page spends that half at its old width — hanging under the pane
-   * sliding over it. */
-  window.rvPrefit = function (ratio) {
-    var page = document.getElementById("rv-page");
-    if (!page || !(ratio > 0) || !fitting) return;
-    var natural = page.offsetWidth;
-    var target = contentWidth(page.parentElement || document.body) * ratio;
-    if (!natural || !target) return;
-    var z = Math.max(0.35, Math.min(3, (target - 1) / natural));
-    page.style.zoom = z;
-    zoom = z;
-    requestAnimationFrame(paint);
-  };
-
   window.rvSetTool = function (name) {
     tool = name === "region" ? "region" : "select";
     document.documentElement.setAttribute("data-rv-tool", tool);

@@ -95,26 +95,6 @@ final class ReviewModel: ObservableObject {
     @Published private(set) var requestedZoom: Double = 0
     @Published private(set) var zoomToken = 0
 
-    /// How the document pane's width is about to change, as new-over-current.
-    ///
-    /// Pushed the moment a pane is toggled, BEFORE the animation runs, so the page can be
-    /// the right size from the first frame instead of chasing a width that is still
-    /// moving. See `rvPrefit`. A fraction rather than a number of points because the
-    /// page's units are not the app's.
-    @Published private(set) var prefitRatio: Double = 0
-    @Published private(set) var prefitToken = 0
-    /// The document pane's width, as SwiftUI last laid it out.
-    var documentWidth: Double = 0
-
-    /// Say that the document pane is about to gain or lose `delta` points.
-    func prefit(by delta: Double) {
-        guard toFit, documentWidth > 1 else { return }
-        let target = documentWidth + delta
-        guard target > 1 else { return }
-        prefitRatio = target / documentWidth
-        prefitToken &+= 1
-    }
-
     /// Bumped to ask the runtime for the current selection; the answer arrives
     /// asynchronously, since reading the DOM from Swift is a round trip.
     @Published var captureToken = 0

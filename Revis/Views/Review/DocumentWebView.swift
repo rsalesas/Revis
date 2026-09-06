@@ -46,9 +46,6 @@ struct DocumentWebView: NSViewRepresentable {
     /// The page reporting the zoom it settled on, and what "fit" currently means.
     var onZoom: ((Double) -> Void)?
     var onFit: ((Double) -> Void)?
-    /// The width change a pane toggle is about to cause, as new-over-current.
-    var prefitRatio: Double = 0
-    var prefitToken: Int = 0
     /// A region drag finished. It carries a complete anchor, so there is nothing to ask
     /// for afterwards.
     var onRegion: ((Anchor) -> Void)?
@@ -81,6 +78,16 @@ struct DocumentWebView: NSViewRepresentable {
         webView.allowsBackForwardNavigationGestures = false
         webView.allowsLinkPreview = false
         webView.setValue(false, forKey: "drawsBackground")
+        /* Clipped by its own layer, not only by SwiftUI's.
+         *
+         * `.clipped()` in SwiftUI masks what SwiftUI draws; a hosted `NSView` is a real
+         * subview with a real layer of its own, and while a pane animation resizes it,
+         * WebKit can still be presenting the larger layer it had a frame ago. That is the
+         * page appearing to run out from under its own view and over the pane beside it —
+         * not the document being too wide, which is what I spent a long time trying to
+         * fix. */
+        webView.wantsLayer = true
+        webView.layer?.masksToBounds = true
 
         context.coordinator.webView = webView
         context.coordinator.world = world
@@ -125,10 +132,6 @@ struct DocumentWebView: NSViewRepresentable {
             c.run("window.rvSelect && window.rvSelect(\(jsQuoted(currentMark)));"
                 + "window.rvSetAnnotations && window.rvSetAnnotations(\(jsQuoted(annotations)));")
         }
-        if c.lastPrefitToken != prefitToken, prefitRatio > 0 {
-            c.lastPrefitToken = prefitToken
-            c.run("window.rvPrefit && window.rvPrefit(\(prefitRatio));")
-        }
         if c.lastZoomToken != zoomToken {
             c.lastZoomToken = zoomToken
             c.pendingZoom = requestedZoom
@@ -165,7 +168,6 @@ struct DocumentWebView: NSViewRepresentable {
         var lastTool: ReviewTool?
         var lastCaptureToken = 0
         var lastZoomToken = 0
-        var lastPrefitToken = 0
         var pendingZoom: Double = 0
         var lastRevealToken = 0
         var lastRevealBlockToken = 0

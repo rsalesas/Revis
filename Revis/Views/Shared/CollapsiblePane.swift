@@ -35,14 +35,25 @@ struct CollapsibleSidePane<Main: View, Pane: View>: View {
     var body: some View {
         HStack(spacing: 0) {
             if edge == .leading { collapsingPane }
-            // CLIPPED. SwiftUI gives the main content a frame during a layout animation
-            // but does not stop it drawing outside one — and an `NSViewRepresentable` is
-            // a real view whose bounds do not necessarily follow the animated frame frame
-            // for frame. So the document drew straight over the pane beside it: the sheet
-            // ran under the annotations and its text was covered until the web view caught
-            // up. Clipped, the worst a lagging web view can do is show a hard edge for a
-            // frame, which is what every other document window does while it resizes.
-            main.clipped()
+            // The pane animates. The content does NOT.
+            //
+            // Measuring both sides settled this. SwiftUI hands the main content its FINAL
+            // width in one step — it does not re-run the layout per frame, exactly as
+            // Vaelora documents — but the hosted `NSView` then animates to it through Core
+            // Animation, so the web view spends a fifth of a second at sizes nobody asked
+            // for. WebKit re-lays-out the document at each of them, which is the jerk, and
+            // the oversized layer sits under the pane sliding in beside it, which is the
+            // overlap. Everything else tried here — refitting per frame, telling the page
+            // its width in advance, clamping the sheet — was working around an animation
+            // that should not have been running.
+            //
+            // Stripped of it, the document is the right size on the first frame and the
+            // panes move around something that is already correct. What is briefly
+            // uncovered is the window's own backdrop, which is the same grey the document
+            // sits on, so there is nothing to see.
+            main
+                .transaction { $0.animation = nil }
+                .clipped()
             if edge == .trailing { collapsingPane }
         }
         // On the split, not on the pane: this is what makes the document's width
