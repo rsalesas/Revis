@@ -254,10 +254,13 @@ final class ReviewModel: ObservableObject {
     func commitDraft() {
         guard let draft else { return }
         let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
-        // An approval is complete without words — the mark IS the statement. Everything
-        // else needs to say something, or the export would carry an operation with no
-        // instruction, which is worse than no annotation at all.
-        guard !note.isEmpty || draft.intent == .approve else { return }
+        // Some operations are complete without words: the span says which text, and
+        // "delete it" or "leave it alone" is the whole instruction. The rest would leave
+        // the export carrying an operation nobody can carry out, which is worse than no
+        // annotation at all. `Intent.needsInstruction` is the single statement of which is
+        // which — the pane's Add button asks the same question of the same property, so
+        // the button and the model cannot disagree about what is committable.
+        guard !note.isEmpty || !draft.intent.needsInstruction else { return }
         let annotation = Annotation(author: author, intent: draft.intent,
                                     note: note, anchor: draft.anchor)
         annotations.append(annotation)

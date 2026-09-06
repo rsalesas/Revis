@@ -60,15 +60,60 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
     /// The placeholder in the note field. It is doing real work: an instruction written
     /// against a prompt is far more likely to say what the model needs than one written
     /// into an empty box labelled "Comment".
+    ///
+    /// It also says whether words are needed at all — see `needsInstruction`.
     var prompt: String {
+        let question: String
         switch self {
-        case .change:   return "What should this say instead?"
-        case .insert:   return "What should go here?"
-        case .remove:   return "Why should this come out?"
-        case .move:     return "Where should this go?"
-        case .question: return "What do you want to know?"
-        case .approve:  return "Anything to preserve about it?"
-        case .note:     return "What did you notice?"
+        case .change:   question = "What should this say instead?"
+        case .insert:   question = "What should go here?"
+        case .remove:   question = "Why should this come out?"
+        case .move:     question = "Where should this go?"
+        case .question: question = "What do you want to know?"
+        case .approve:  question = "Anything to preserve about it?"
+        case .note:     question = "What did you notice?"
+        }
+        return needsInstruction ? question : question + " (optional)"
+    }
+
+    /// Whether an annotation of this kind is incomplete without words.
+    ///
+    /// The test is whether `directive` alone is already an instruction somebody could
+    /// carry out. "Delete the quoted text" and "leave the quoted text as it is" are; the
+    /// span says which text, and there is nothing left to ask. "Rewrite the quoted text"
+    /// is not — rewrite it to say what? — and neither is a question with no question in it.
+    ///
+    /// This is why Add is available on an empty Remove and not on an empty Change, which
+    /// looks arbitrary until it is said out loud. The interface has to say it: see the hint
+    /// beside the Add button, and the "(optional)" the prompt grows.
+    var needsInstruction: Bool {
+        switch self {
+        case .remove, .approve: return false
+        case .change, .insert, .move, .question, .note: return true
+        }
+    }
+
+    /// What the field is missing, when it is missing something. Shown beside a disabled
+    /// Add button — a control that is disabled for reasons the reviewer cannot see is a
+    /// control that reads as broken.
+    var missingInstruction: String {
+        switch self {
+        case .change:   return "Say what it should say instead"
+        case .insert:   return "Say what to add"
+        case .move:     return "Say where it should go"
+        case .question: return "Write the question"
+        case .note:     return "Write the note"
+        case .remove, .approve: return ""
+        }
+    }
+
+    /// What the export says for an annotation of this kind that carries no words. Only
+    /// reachable for the two that do not need any.
+    var standsAlone: String {
+        switch self {
+        case .remove:  return "_No reason given; the deletion is the instruction._"
+        case .approve: return "_Approved as written; leave unchanged._"
+        default:       return ""
         }
     }
 

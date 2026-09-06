@@ -152,8 +152,8 @@ enum ReviewExport {
             out += "\n**Instruction**"
             if !annotation.author.isEmpty { out += " — \(annotation.author)" }
             out += "\n\n\(note)\n"
-        } else if annotation.intent == .approve {
-            out += "\n_Approved as written; leave unchanged._\n"
+        } else if !annotation.intent.standsAlone.isEmpty {
+            out += "\n\(annotation.intent.standsAlone)\n"
         }
 
         out += "\n<sub>Anchor: \(anchorHint(annotation.anchor)) — positional, "

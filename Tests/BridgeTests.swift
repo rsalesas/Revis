@@ -104,17 +104,44 @@ struct ReviewModelTests {
         }
     }
 
-    /// An approval is complete without words; nothing else is, or the export would carry
-    /// an operation with no instruction attached to it.
-    @Test func onlyAnApprovalCanBeCommittedEmpty() {
-        let model = model(defaultIntent: .change)
-        model.openDraft(on: anchor)
-        model.commitDraft()
-        #expect(model.annotations.isEmpty)
+    /// Which operations stand on their own, and the rule being in ONE place.
+    ///
+    /// The pane's Add button and the model asked this question separately, in two
+    /// different phrasings — which is how a control comes to offer something the model
+    /// then refuses. They ask `Intent.needsInstruction` now, and this pins what it says.
+    @Test func onlySelfContainedOperationsCanBeCommittedEmpty() {
+        for intent in Intent.allCases {
+            let model = model(defaultIntent: intent)
+            model.openDraft(on: anchor)
+            model.commitDraft()
+            #expect(model.annotations.isEmpty == intent.needsInstruction,
+                    "empty \(intent.rawValue) was \(intent.needsInstruction ? "accepted" : "refused")")
+        }
+        // "Delete this" and "leave this alone" are complete instructions; the span says
+        // which text. "Rewrite this" is not — rewrite it to say what?
+        #expect(!Intent.remove.needsInstruction)
+        #expect(!Intent.approve.needsInstruction)
+        #expect(Intent.change.needsInstruction)
+        #expect(Intent.insert.needsInstruction)
+        #expect(Intent.move.needsInstruction)
+        #expect(Intent.question.needsInstruction)
+        #expect(Intent.note.needsInstruction)
+    }
 
-        model.draft?.intent = .approve
-        model.commitDraft()
-        #expect(model.annotations.count == 1)
+    /// Every intent that needs words says what is missing, and every one that does not
+    /// says what it means on its own. A blank either way is a hint that does not appear.
+    @Test func everyIntentExplainsItself() {
+        for intent in Intent.allCases {
+            if intent.needsInstruction {
+                #expect(!intent.missingInstruction.isEmpty,
+                        "\(intent.rawValue) disables Add without saying why")
+                #expect(!intent.prompt.hasSuffix("(optional)"))
+            } else {
+                #expect(!intent.standsAlone.isEmpty,
+                        "\(intent.rawValue) can be empty but the export says nothing")
+                #expect(intent.prompt.hasSuffix("(optional)"))
+            }
+        }
     }
 
     /// Resolving keeps the annotation — a review records that a thing was dealt with, not

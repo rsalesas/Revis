@@ -169,7 +169,20 @@ struct AnnotationsPane: View {
                 .focused($focused, equals: .draft)
                 .onSubmit { model.commitDraft() }
             HStack(spacing: 8) {
-                Spacer()
+                // The reason Add is unavailable, in the space the row already has.
+                //
+                // Add is enabled on an empty Remove and disabled on an empty Change, and
+                // without this that difference is invisible — the button appears to enable
+                // itself at random as you change the type. Put in the leading space the row
+                // was spacing with anyway, so showing it moves nothing.
+                if !canCommit(draft) {
+                    Text(draft.intent.missingInstruction)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+                Spacer(minLength: 4)
                 Button("Cancel") { model.cancelDraft() }
                     .keyboardShortcut(.cancelAction)
                 // Explicitly prominent and explicitly tinted: a plain default button takes
@@ -188,10 +201,11 @@ struct AnnotationsPane: View {
         .background(alignment: .leading) { bar(AnnotationPalette.color(for: draft.intent)) }
     }
 
-    /// An approval needs no words — the mark is the statement. Everything else does, or
-    /// the export would carry an operation with no instruction attached to it.
+    /// The same question `ReviewModel.commitDraft` asks, of the same property — so the
+    /// button cannot offer something the model would refuse, or refuse something it would
+    /// accept.
     private func canCommit(_ draft: AnnotationDraft) -> Bool {
-        draft.intent == .approve
+        !draft.intent.needsInstruction
             || !draft.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -247,9 +261,11 @@ struct AnnotationsPane: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                // An approval with no words is complete, and should not read as unfinished.
-                Text(annotation.intent == .approve ? "Approved as written"
-                     : "Nothing written yet")
+                // An annotation that needs no words is complete without them, and must
+                // not read as unfinished.
+                Text(annotation.intent.needsInstruction ? "Nothing written yet"
+                     : (annotation.intent == .approve ? "Approved as written"
+                        : "No reason given"))
                     .font(.system(size: 12))
                     .italic()
                     .foregroundStyle(.tertiary)
@@ -358,18 +374,23 @@ private struct RevealIfSelected: ViewModifier {
 private struct IntentLabel: View {
     let intent: Intent
 
-    /// Wide enough for "Question", the longest of the seven at this size, with a point of
-    /// slack — a name that just fits is a name that clips on the first system font change.
-    static let titleWidth: CGFloat = 54
-    static let iconSide: CGFloat = 14
+    /// Wide enough for "Question", the longest of the seven at this size, with slack — a
+    /// name that just fits is a name that clips on the first system font change.
+    static let titleWidth: CGFloat = 66
+    static let iconSide: CGFloat = 16
+    /// The type size. This is the row's headline — the one thing that says what an
+    /// annotation IS — and it was set at 10pt, smaller than the note beneath it and
+    /// smaller than the quote. It was hard to read and a poor target to click. It matches
+    /// the note now, and carries its weight to stay distinct from it.
+    static let fontSize: CGFloat = 12
     /// The whole label, stated outright. See below for why a fixed width on each half was
     /// not enough.
-    static let width: CGFloat = iconSide + 4 + titleWidth
+    static let width: CGFloat = iconSide + 5 + titleWidth
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             Image(systemName: intent.symbol)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: Self.fontSize, weight: .semibold))
                 // A square, centred, AND clipped. The frame alone was not enough: it sets
                 // the layout size but lets a wide glyph — `pencil.line`, `text.insert` —
                 // paint outside it, and a `Menu` measures what its label paints. So the
@@ -378,12 +399,16 @@ private struct IntentLabel: View {
                 .frame(width: Self.iconSide, height: Self.iconSide)
                 .clipped()
             Text(intent.title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: Self.fontSize, weight: .semibold))
                 .lineLimit(1)
                 .frame(width: Self.titleWidth, alignment: .leading)
         }
         // Belt and braces: whatever the two halves do, the label is this wide.
         .frame(width: Self.width, alignment: .leading)
+        // A taller target than the type needs. This is a control people click to change an
+        // annotation's kind, and at the type's own height it was a nine-point strip.
+        .frame(height: 22)
+        .contentShape(Rectangle())
         .foregroundStyle(AnnotationPalette.color(for: intent))
     }
 }
@@ -415,9 +440,12 @@ struct IntentPicker: View {
         // itself, and each was a way the label moved: the control size sets the chevron's
         // size and the label's padding, the font is inherited by the label unless it is
         // stated, and `fixedSize` stops the menu claiming whatever width is going.
-        .controlSize(.small)
-        .font(.system(size: 10, weight: .semibold))
-        .imageScale(.small)
+        //
+        // `.regular` rather than `.small`: the small size shrinks the chevron to a mark
+        // you have to aim at, and this is the control that says what an annotation is.
+        .controlSize(.regular)
+        .font(.system(size: IntentLabel.fontSize, weight: .semibold))
+        .imageScale(.medium)
         .fixedSize()
         .help("What is being asked for here — click to change it")
     }
