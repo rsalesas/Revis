@@ -283,11 +283,13 @@ struct MotionTests {
         }
     }
 
-    /// The document eases to its new size over the PANE's beat — not a number typed beside
-    /// it, which is how the two come to drift apart.
-    @Test func theSheetEasesOnThePanelToken() {
-        #expect(stylesheet.contains(
-            "transition: zoom var(\(Motion.panel.cssDurationProperty))"
-                + " var(\(Motion.panel.cssCurveProperty))"))
+    /// The sheet must NOT ease to its new size.
+    ///
+    /// It has to fill the viewport exactly, so a zoom that arrives late is a sheet wider
+    /// than the window holding it — which is a sheet that gets clipped. Vaelora can ease
+    /// its page because a page is a fixed piece of paper that does not fill anything; a
+    /// late zoom there costs it a wrong margin, not a cut edge.
+    @Test func theSheetDoesNotEaseItsZoom() {
+        #expect(!stylesheet.contains("transition: zoom"))
     }
 }

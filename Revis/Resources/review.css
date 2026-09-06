@@ -73,21 +73,20 @@ body {
   position: relative;
   width: 920px;
   margin: 0 auto;
-  /* Ease the zoom over exactly the pane's own beat, with exactly its curve.
+  /* NO transition on the zoom, and this is the whole point of the sheet.
    *
-   * This is the last piece, and it is what Vaelora does. The web view is now handed its
-   * final width in one step — no per-frame resizing, see `CollapsiblePane` — so the page
-   * knows where it is going immediately. Cutting to it means the document jumps to its new
-   * size while the pane is still a quarter of a second from arriving. Easing over the same
-   * duration and the same curve means the two move together, and what you watch is one
-   * thing changing shape rather than two things disagreeing about when.
+   * Easing it was copied from Vaelora, and it does not carry across, for a reason that
+   * took saying out loud to see: a Vaelora page is a fixed piece of paper that does not
+   * have to fill anything, so a zoom arriving late just means the margins around it are
+   * briefly wrong. This sheet must EXACTLY fill the viewport — that is what fitting means
+   * — so a zoom arriving late means the sheet is wider than the window that holds it, and
+   * a sheet wider than its window is clipped. The symptom is precisely "the white portion
+   * does not resize, it extends to the edge and gets cut off", and it lasted exactly as
+   * long as the transition did.
    *
-   * Cheap, because the sheet is a fixed measure: the document is laid out at 920 points
-   * whatever the zoom, so this scales a finished picture rather than reflowing text.
-   *
-   * The duration and the curve are `Motion.panel`, which is also what the pane animates
-   * with. `MotionTests` fails if the two drift apart. */
-  transition: zoom var(--rv-motion-panel-duration) var(--rv-motion-panel);
+   * The view is handed its final width in one step now (see `CollapsiblePane`), so there
+   * is nothing left to ease TOWARDS: the right answer is known immediately and the only
+   * correct thing to do with it is use it. */
 }
 
 /* Not while the reviewer is stepping the zoom themselves: pressing + should change the
