@@ -158,8 +158,8 @@ struct ReviewModelTests {
         #expect(model.visibleAnnotations.isEmpty)   // the pane defaults to Open
     }
 
-    /// A verdict is a decision ABOUT an annotation, and the two states it can be in.
-    @Test func aVerdictCanBeGivenAndTakenBack() {
+    /// A verdict is final, and it settles the annotation it is about.
+    @Test func aVerdictIsFinalAndLocksWhatItDecided() {
         let model = model(defaultIntent: .change)
         model.openDraft(on: anchor)
         model.draft?.note = "please"
@@ -173,11 +173,51 @@ struct ReviewModelTests {
         #expect(!(model.annotations.first?.isActionable ?? true))
         #expect(model.openCount == 0)
 
-        // The same verdict again takes it back — there is no third button for "no
-        // opinion", so the one you pressed has to be able to undo itself.
-        model.decide(.declined, for: id)
-        #expect(model.annotations.first?.verdict == nil)
-        #expect(model.openCount == 1)
+        // Final: neither reversed nor overwritten. A decision you can quietly undo is not
+        // on the record at all.
+        model.decide(.approved, for: id)
+        #expect(model.annotations.first?.verdict == .declined)
+
+        // And what was decided is now settled — an agreement to one thing is not an
+        // agreement to whatever it is later changed into.
+        model.setNote("something else entirely", for: id)
+        #expect(model.annotations.first?.note == "please")
+        model.setIntent(.remove, for: id)
+        #expect(model.annotations.first?.intent == .change)
+        model.delete(id)
+        #expect(model.annotations.count == 1)
+        #expect(model.annotations.first?.editingRefusal(for: model.author) != nil)
+    }
+
+    /// Yours or nobody's. Rewriting another reviewer's words leaves their name on a
+    /// sentence they did not write.
+    @Test func anotherReviewersAnnotationIsNotYoursToChange() {
+        let model = model(defaultIntent: .change)
+        let mine = Annotation(author: model.author, intent: .change, note: "mine",
+                              anchor: anchor)
+        let theirs = Annotation(author: "Someone Else", intent: .change, note: "theirs",
+                                anchor: anchor)
+        let unsigned = Annotation(author: "", intent: .change, note: "unsigned",
+                                  anchor: anchor)
+        model.annotations = [mine, theirs, unsigned]
+
+        #expect(model.canEdit(mine))
+        #expect(!model.canEdit(theirs))
+        #expect(model.canEdit(unsigned))          // nobody's name is on it
+
+        model.setNote("changed", for: theirs.id)
+        #expect(model.annotation(theirs.id)?.note == "theirs")
+        model.delete(theirs.id)
+        #expect(model.annotations.count == 3)
+
+        // …but responding to it is exactly what a second reviewer is for.
+        model.resolve(theirs.id)
+        #expect(model.annotation(theirs.id)?.status == .resolved)
+        model.decide(.approved, for: theirs.id)
+        #expect(model.annotation(theirs.id)?.verdict == .approved)
+
+        // The refusal says whose it is, so a disabled control can explain itself.
+        #expect(theirs.editingRefusal(for: model.author)?.contains("Someone Else") == true)
     }
 
     /// Reviews written before approving became a verdict must still open.

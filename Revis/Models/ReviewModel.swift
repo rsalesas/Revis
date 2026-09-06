@@ -321,13 +321,17 @@ final class ReviewModel: ObservableObject {
 
     // MARK: - Changing one
 
+    /// Whether this reviewer may rewrite the annotation — asked in one place so the
+    /// controls that offer it and the methods that perform it cannot disagree.
+    func canEdit(_ annotation: Annotation) -> Bool { annotation.isEditable(by: author) }
+
     func setIntent(_ intent: Intent, for id: UUID) {
-        guard let index = index(of: id) else { return }
+        guard let index = index(of: id), canEdit(annotations[index]) else { return }
         annotations[index].intent = intent
     }
 
     func setNote(_ note: String, for id: UUID) {
-        guard let index = index(of: id) else { return }
+        guard let index = index(of: id), canEdit(annotations[index]) else { return }
         annotations[index].note = note
     }
 
@@ -346,15 +350,18 @@ final class ReviewModel: ObservableObject {
         annotations[index].status = .open
     }
 
-    /// Agree or disagree with an annotation — including one's own, since a reviewer
-    /// rereading their own list is entitled to change their mind about it.
-    func decide(_ verdict: Verdict?, for id: UUID) {
+    /// Agree or disagree with an annotation — anyone's, including one's own. Final; see
+    /// `Annotation.decide`.
+    func decide(_ verdict: Verdict, for id: UUID) {
         guard let index = index(of: id) else { return }
         annotations[index].decide(verdict, by: author)
     }
 
+    /// Deleting is editing, and follows the same rule: another reviewer's annotation is
+    /// not yours to remove, and a decided one is not anybody's.
     func delete(_ id: UUID) {
-        annotations.removeAll { $0.id == id }
+        guard let index = index(of: id), canEdit(annotations[index]) else { return }
+        annotations.remove(at: index)
         if selectedID == id { selectedID = nil }
     }
 

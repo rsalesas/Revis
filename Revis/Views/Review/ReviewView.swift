@@ -123,8 +123,14 @@ struct ReviewView: View {
 
             // A divider, because these are two different questions. The picker on the left
             // is HOW you are pointing; the buttons on the right are WHAT you are asking
-            // for. Run together they read as one row of nine unrelated controls.
-            Divider()
+            // for. Run together they read as one row of unrelated controls.
+            //
+            // Inside an `HStack` and given a height, because a bare `Divider()` is a
+            // HORIZONTAL rule — it only turns vertical when its container is laying things
+            // out in a row, and a toolbar item group is not that container. On its own it
+            // drew a short dash between the two sets, which reads as a stray minus sign.
+            HStack(spacing: 0) { Divider() }
+                .frame(height: 18)
 
             // One button per kind, so marking something up is a single click rather than a
             // click and then a menu. The kind is still changeable afterwards from the row

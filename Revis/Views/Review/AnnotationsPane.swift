@@ -211,6 +211,8 @@ struct AnnotationsPane: View {
         // while one is open nothing else reads as active.
         let selected = model.draft == nil && model.selectedID == annotation.id
         let colour = AnnotationPalette.color(for: annotation.intent)
+        let editable = model.canEdit(annotation)
+        let refusal = annotation.editingRefusal(for: model.author)
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -229,6 +231,8 @@ struct AnnotationsPane: View {
                 IntentPicker(intent: Binding(
                     get: { model.annotation(annotation.id)?.intent ?? annotation.intent },
                     set: { model.setIntent($0, for: annotation.id) }))
+                    .disabled(!editable)
+                    .help(refusal ?? "What is being asked for here — click to change it")
                 Spacer()
                 if let verdict = annotation.verdict {
                     badge(verdict.title, colour: Color(hex: verdict.hex),
@@ -241,7 +245,7 @@ struct AnnotationsPane: View {
 
             quoted(annotation.anchor)
 
-            if selected {
+            if selected && editable {
                 TextField(annotation.intent.prompt, text: noteBinding(annotation.id),
                           axis: .vertical)
                     .textFieldStyle(.plain)
@@ -271,25 +275,30 @@ struct AnnotationsPane: View {
                 if selected {
                     // Agreeing or disagreeing with what was asked — a verdict on the
                     // annotation, which is a different question from whether it has been
-                    // dealt with. Pressing the same one again takes it back.
-                    ForEach(Verdict.allCases, id: \.self) { verdict in
-                        Button {
-                            model.decide(verdict, for: annotation.id)
-                        } label: {
-                            Image(systemName: verdict.symbol)
+                    // dealt with, and a different question from who wrote it: responding
+                    // to somebody is exactly what a second reviewer is for.
+                    //
+                    // Offered only while undecided. A verdict is final, so a control that
+                    // looked like it could change one would be lying about what it does.
+                    if !annotation.isDecided {
+                        ForEach(Verdict.allCases, id: \.self) { verdict in
+                            Button {
+                                model.decide(verdict, for: annotation.id)
+                            } label: {
+                                Image(systemName: verdict.symbol)
+                            }
+                            .foregroundStyle(.secondary)
+                            .help("\(verdict.verb) this — "
+                                  + (verdict == .approved
+                                     ? "agree it should be done"
+                                     : "say it should NOT be done; the export will tell the"
+                                       + " reader not to act on it")
+                                  + ". This cannot be undone.")
                         }
-                        .foregroundStyle(annotation.verdict == verdict
-                                         ? AnyShapeStyle(Color(hex: verdict.hex))
-                                         : AnyShapeStyle(.secondary))
-                        .help(annotation.verdict == verdict
-                              ? "Take back this \(verdict.title.lowercased()) verdict"
-                              : "\(verdict.verb) this — "
-                                + (verdict == .approved
-                                   ? "agree it should be done"
-                                   : "say it should NOT be done; the export will tell the"
-                                     + " reader not to act on it"))
+                        Divider().frame(height: 11)
                     }
-                    Divider().frame(height: 11)
+                    // Resolving is open to anyone: it says the thing was dealt with, which
+                    // is a fact about the work rather than a change to what was said.
                     if annotation.status == .open {
                         Button("Resolve") { model.resolve(annotation.id) }
                             .help("Mark as dealt with. It stays in the review, and the"
@@ -300,7 +309,8 @@ struct AnnotationsPane: View {
                     Button(role: .destructive) { model.delete(annotation.id) } label: {
                         Image(systemName: "trash")
                     }
-                    .help("Delete this annotation")
+                    .disabled(!editable)
+                    .help(refusal ?? "Delete this annotation")
                 }
             }
             .controlSize(.small)

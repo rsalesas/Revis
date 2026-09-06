@@ -277,16 +277,51 @@ struct Annotation: Identifiable, Codable, Equatable, Sendable {
     /// Whether this should be acted on. A declined request is one somebody refused.
     var isActionable: Bool { status == .open && verdict != .declined }
 
-    mutating func decide(_ verdict: Verdict?, by author: String) {
-        // Choosing the same verdict twice takes it back, the way a toggle does — there is
-        // no third button for "actually, no opinion".
-        if self.verdict == verdict {
-            self.verdict = nil
-            verdictBy = nil
-        } else {
-            self.verdict = verdict
-            verdictBy = author
+    /// Whether a verdict has been given. Once one has, the annotation is settled.
+    var isDecided: Bool { verdict != nil }
+
+    /// Give a verdict. **Final** — it cannot be changed or taken back.
+    ///
+    /// It was a toggle, and that was wrong. A verdict is somebody putting their name to a
+    /// decision, and a decision you can quietly reverse is not on the record: the author
+    /// of a request could watch it be declined and click it back to undecided, and nothing
+    /// would show that it had ever happened. If a verdict was given in error the honest
+    /// remedy is a new annotation saying so, which leaves both on the record.
+    mutating func decide(_ verdict: Verdict, by author: String) {
+        guard self.verdict == nil else { return }
+        self.verdict = verdict
+        verdictBy = author
+    }
+
+    /// Whether `reviewer` may rewrite or delete this.
+    ///
+    /// Two rules, both about not editing history out from under somebody.
+    ///
+    /// Yours or nobody's — the same rule Vaelora applies to its comments. Rewriting
+    /// another reviewer's words leaves their name on a sentence they did not write, which
+    /// is worse than not being able to fix their typo. Anyone can still resolve one or
+    /// give it a verdict; those are RESPONSES, and responding to what somebody said is the
+    /// point.
+    ///
+    /// And nothing that has been decided. Once a reviewer has approved a request, its
+    /// author must not be able to change what was approved into something else — an
+    /// agreement to one thing is not an agreement to whatever it later became.
+    func isEditable(by reviewer: String) -> Bool {
+        guard !isDecided else { return false }
+        return author.isEmpty
+            || author.compare(reviewer, options: .caseInsensitive) == .orderedSame
+    }
+
+    /// Why it cannot be edited, for the control that is disabled because of it. A control
+    /// you can see and cannot use should say why; a missing one says nothing at all.
+    func editingRefusal(for reviewer: String) -> String? {
+        if isDecided {
+            let by = verdictBy.map { " by \($0)" } ?? ""
+            return "\(verdict?.title ?? "Decided")\(by) — a decided annotation cannot be"
+                + " changed. Add a new one if it is wrong."
         }
+        guard !isEditable(by: reviewer) else { return nil }
+        return "Only \(author) can change this — you can resolve it, or approve or decline it."
     }
 
     /// Document order, so the pane and the export both read down the page.
