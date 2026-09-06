@@ -420,11 +420,26 @@
   function fitZoom() {
     var page = document.getElementById("rv-page");
     if (!page) return 1;
-    var host = page.parentElement || document.body;
-    var available = host.clientWidth;
     var natural = page.offsetWidth;
+    var available = contentWidth(page.parentElement || document.body);
     if (!available || !natural) return parseFloat(page.style.zoom) || 1;
     return Math.max(0.35, Math.min(3, available / natural));
+  }
+
+  /* The width actually available INSIDE an element.
+   *
+   * `clientWidth` includes padding — it is the padding box, not the content box — and the
+   * gutter round the sheet is padding. So fitting against `clientWidth` scaled the sheet to
+   * the full width including both gutters, and it ran off the trailing edge by the whole 48
+   * points every single time. Read the padding back off the computed style rather than
+   * repeating the number here: the stylesheet owns the gutter, and a copy of it in the
+   * runtime is a second place for it to be wrong. */
+  function contentWidth(el) {
+    if (!el) return 0;
+    var style = window.getComputedStyle(el);
+    var left = parseFloat(style.paddingLeft) || 0;
+    var right = parseFloat(style.paddingRight) || 0;
+    return Math.max(0, el.clientWidth - left - right);
   }
 
   window.rvSetTool = function (name) {
