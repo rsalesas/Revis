@@ -53,7 +53,11 @@ struct StatusBar: View {
                 }
             }
         }
-        .font(.system(size: 10.5))
+        // 11pt medium, the size Vaelora's status bar uses. It was 10.5 regular, which is
+        // smaller than anything else in the window and was being read as a mistake — and
+        // it is not decoration: this line is the app telling you it rewrote your document
+        // before showing it.
+        .font(.system(size: 11, weight: .medium))
         .foregroundStyle(.secondary)
         .lineLimit(1)
     }
@@ -86,7 +90,7 @@ struct StatusBar: View {
         } label: {
             Label(model.useDocumentStyle ? "Document style" : "Reading style",
                   systemImage: model.useDocumentStyle ? "doc.richtext" : "textformat")
-                .font(.system(size: 10.5))
+                .font(.system(size: 11, weight: .medium))
                 .labelStyle(.titleAndIcon)
         }
         .buttonStyle(.plain)
@@ -129,6 +133,14 @@ struct StatusBar: View {
             .help("Zoom")
             zoomButton("plus", "Zoom in") { model.zoomIn() }
                 .disabled(model.zoom >= 2.99)
+            // Fit is in the menu too, as it is in Vaelora — but it is also the way BACK,
+            // and here that matters more than it does there. Zooming past the fit makes
+            // the sheet wider than the window, and the control that undoes it should not
+            // be inside a menu you have to know is there.
+            zoomButton("arrow.left.and.right", "Fit the page to the window") {
+                model.zoomToFit()
+            }
+            .disabled(model.isFitted)
         }
         .background(Color.primary.opacity(0.06), in: Capsule())
         .disabled(model.isEmpty)

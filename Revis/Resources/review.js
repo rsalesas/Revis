@@ -407,25 +407,24 @@
 
   /* The zoom at which the sheet just fills the space it has.
    *
-   * Worked out as a RATIO against the zoom already in force, not as an absolute. The
-   * absolute form divided the available width by the sheet's *rendered* width — but the
-   * sheet is already rendered at the current zoom, so at 119% it reported that fitting
-   * meant 100%, and Fit shrank the page instead of fitting it. Fit was only ever correct
-   * from exactly 100%.
+   * Now that the sheet is a fixed measure this is a plain division: how many times its own
+   * width fits in the room available. `offsetWidth` is the sheet's UNZOOMED width — inside
+   * a `zoom`ed subtree the layout APIs report the element's own coordinate space, which is
+   * the same reason the margin marks must not divide their positions by the zoom — so the
+   * answer is an absolute zoom and not a ratio to compound with the current one.
    *
-   * Measured against the sheet's PARENT rather than the viewport, so the breathing room
-   * is the body's padding and nothing has to guess at it — which is what keeps the gap at
-   * the sides equal to the gap at the top. Subtracting a made-up allowance here is what
-   * made them differ. */
+   * Measured against the sheet's parent, whose padding is the breathing room, so the gap
+   * at the sides is the same number as the gap at the top by construction rather than by
+   * two calculations agreeing. `clientWidth` excludes a scrollbar if one is showing, so a
+   * document long enough to scroll does not fit a fraction too wide. */
   function fitZoom() {
     var page = document.getElementById("rv-page");
     if (!page) return 1;
-    var current = parseFloat(page.style.zoom) || 1;
     var host = page.parentElement || document.body;
     var available = host.clientWidth;
-    var rendered = page.getBoundingClientRect().width;
-    if (!available || !rendered) return current;
-    return Math.max(0.35, Math.min(3, current * (available / rendered)));
+    var natural = page.offsetWidth;
+    if (!available || !natural) return parseFloat(page.style.zoom) || 1;
+    return Math.max(0.35, Math.min(3, available / natural));
   }
 
   window.rvSetTool = function (name) {

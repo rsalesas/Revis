@@ -53,11 +53,29 @@ body {
   padding: var(--rv-gutter) var(--rv-gutter) 96px;
 }
 
+/* A SHEET of a fixed measure, not a column that fills whatever it is given.
+ *
+ * This was `max-width`, and that is what made the zoom incomprehensible. CSS `zoom`
+ * divides the containing block's coordinate space, so above the fitting zoom the max-width
+ * stopped binding and the sheet reflowed to fill the pane: the page stayed exactly as wide
+ * on screen and only the text grew. Below it, the sheet shrank normally. One control, two
+ * behaviours, and no way to tell from the outside which one you were about to get — and
+ * "Fit Width" did nothing at all up there, because a sheet already filling the width is
+ * already fitted.
+ *
+ * A fixed width makes zoom mean one thing at every setting: the sheet is 920 points of
+ * measure and the zoom says how big those points are drawn. That is what Vaelora does with
+ * a page, it is what every document viewer does, and it is the model "Fit Width" belongs
+ * to. */
 #rv-page {
   position: relative;
-  max-width: 920px;
+  width: 920px;
   margin: 0 auto;
 }
+
+/* Zoomed past the fit, the sheet is wider than the window — as a page is in any viewer.
+   Below it there is nothing to scroll. */
+body { overflow-x: auto; }
 
 #rv-sheet {
   position: relative;
