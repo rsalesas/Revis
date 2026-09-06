@@ -918,9 +918,15 @@
     var pending = 0;
     window.addEventListener("resize", function () {
       if (fitting) {
-        // Held off while a pane animation plays out: the size was settled in advance and
-        // re-deriving it from a width that is still moving would undo that.
-        if (Date.now() < holdUntil) { requestAnimationFrame(paint); return; }
+        /* Held off while a pane animation plays out — and doing NOTHING while it does.
+         *
+         * It repainted every frame, which was the last of the jerk. It did not need to:
+         * the marks, the region boxes and the highlights are all positioned inside the
+         * sheet or against the text itself, so when the viewport narrows and the sheet
+         * re-centres they move with it for free. Repainting was rebuilding every highlight
+         * range and every mark, sixty times a second, to arrive at the positions the
+         * browser had already given them. */
+        if (Date.now() < holdUntil) return;
         window.rvSetZoom(0);
         return;
       }
