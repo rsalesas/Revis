@@ -22,6 +22,9 @@ import SwiftUI
 /// uncover it — which reads as the document sliding away to expose something that was
 /// already there, rather than as a panel arriving.
 struct CollapsibleSidePane<Main: View, Pane: View>: View {
+    /// Which side the pane lives on. The anchoring below is mirrored for each, and the
+    /// mirroring is the whole of the difference — see the note about sliding.
+    var edge: HorizontalEdge = .trailing
     let isOpen: Bool
     let width: CGFloat
     @ViewBuilder var main: Main
@@ -31,8 +34,9 @@ struct CollapsibleSidePane<Main: View, Pane: View>: View {
 
     var body: some View {
         HStack(spacing: 0) {
+            if edge == .leading { collapsingPane }
             main
-            collapsingPane
+            if edge == .trailing { collapsingPane }
         }
         // On the split, not on the pane: this is what makes the document's width
         // interpolate rather than jump.
@@ -41,12 +45,17 @@ struct CollapsibleSidePane<Main: View, Pane: View>: View {
 
     private var collapsingPane: some View {
         HStack(spacing: 0) {
-            PaneDivider()
+            if edge == .trailing { PaneDivider() }
             // Fixed here so the controls stay laid out at their real width all the way
             // through — the outer frame clips, it does not squeeze.
             pane.frame(width: width)
+            if edge == .leading { PaneDivider() }
         }
-        .frame(width: isOpen ? width + Self.dividerWidth : 0, alignment: .leading)
+        // Anchored to the edge the pane comes FROM, so it slides rather than being
+        // uncovered: closed, the content sits wholly outside the zero-width frame on that
+        // side, and the clip hides it there.
+        .frame(width: isOpen ? width + Self.dividerWidth : 0,
+               alignment: edge == .leading ? .trailing : .leading)
         .clipped()
     }
 }

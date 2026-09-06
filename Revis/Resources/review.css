@@ -262,13 +262,18 @@ html[data-rv-tool="region"] #rv-sheet {
   transition: transform 90ms ease-out;
 }
 
-/* There is no separate selected state, and no glow. A mark grows under the pointer and
-   STAYS grown once it is chosen, because those are the same thing to look at: you point at
-   it, it answers, you click, it holds. A halo behind the chosen one was tried — it drew
-   more in order to say less, and at fractional pixel sizes it read as a smudge. The slot is
-   sized so the grown mark still fits inside it. */
-.rv-marker:hover,
-.rv-marker.current { transform: scale(1.25); }
+/* Pointing at a mark and CHOOSING one are different states, so they look different.
+   They were the same — both just grew the mark — and "which one am I looking at" then had
+   no answer at all: everything under the pointer looked chosen and the chosen one looked
+   like nothing once the pointer left it.
+   Hover grows it a little. Chosen draws a ring around it with a gap of page showing
+   through, which is the same shape a focus ring is and reads as "this one" without
+   drawing anything new on the page. Not a glow: a soft halo at these sizes is a smudge. */
+.rv-marker { border-radius: 50%; }
+.rv-marker:hover { transform: scale(1.12); }
+.rv-marker.current {
+  box-shadow: 0 0 0 2px var(--rv-sheet), 0 0 0 3.5px var(--rv-colour);
+}
 
 /* A mark being written, standing in the slot its mark will take. Not a target — the pane
    has the keyboard, and the only two ways out of a draft are to write it or abandon it. */

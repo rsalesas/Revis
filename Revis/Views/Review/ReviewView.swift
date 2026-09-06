@@ -46,10 +46,19 @@ struct ReviewView: View {
         if model.isEmpty {
             EmptyReviewView()
         } else {
-            // Nested, inspector OUTERMOST: opening the annotations then takes width from
-            // the document and leaves the inspector where it is, which is what you want
-            // when the inspector is the thing you were reading.
-            CollapsibleSidePane(isOpen: model.inspectorVisible, width: 260) {
+            // The outline sits on the LEADING side, and the annotations on the trailing.
+            //
+            // It was on the trailing side beside the annotations, which is where Vaelora
+            // puts its inspector — but Vaelora's inspector configures an export, and this
+            // one is a table of contents. Navigation belongs on the leading edge: it is
+            // where every document application on this platform puts a source list, and it
+            // is where the eye goes to ask "where am I" rather than "what did somebody say
+            // about this".
+            //
+            // Nested with the inspector OUTERMOST: opening the annotations then takes width
+            // from the document and leaves the outline where it is, which is what you want
+            // when the outline is the thing you were reading down.
+            CollapsibleSidePane(edge: .leading, isOpen: model.inspectorVisible, width: 260) {
                 CollapsibleSidePane(isOpen: model.annotationsVisible, width: 300) {
                     document
                 } pane: {
@@ -181,7 +190,7 @@ struct ReviewView: View {
             Button {
                 withMotion(.panel) { model.inspectorVisible.toggle() }
             } label: {
-                Label("Inspector", systemImage: "sidebar.right")
+                Label("Inspector", systemImage: "sidebar.leading")
             }
             .help("Show or hide the outline and document details")
         }

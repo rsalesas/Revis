@@ -137,7 +137,7 @@ struct AnnotationsPane: View {
         if let draft = model.draft {
             draftRow(draft)
                 .id(Self.draftRowID)
-                .revealedRowTransition()
+                .transition(.opacity)
             Divider().overlay(Theme.hairline)
         }
     }
@@ -211,114 +211,15 @@ struct AnnotationsPane: View {
         // while one is open nothing else reads as active.
         let selected = model.draft == nil && model.selectedID == annotation.id
         let colour = AnnotationPalette.color(for: annotation.intent)
-        let editable = model.canEdit(annotation)
-        let refusal = annotation.editingRefusal(for: model.author)
 
+        // Broken into three, and not for tidiness: as one expression the row grew past
+        // what the type checker will attempt, and it says so by refusing to compile the
+        // whole file rather than by pointing at the line that did it.
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                // ALWAYS the picker, selected or not.
-                //
-                // It used to be a plain label that became a menu when the row was chosen,
-                // with matched metrics on the label so nothing would move. That was not
-                // enough and could not be: a `Menu` restyles its own label — its control
-                // size, its font, its padding — so swapping one for the other moved the
-                // icon, changed the type size, and shifted the whole card. Matching two
-                // controls pixel for pixel is a losing game; having one control is not.
-                //
-                // It is also the truer interface. An annotation's intent can be changed
-                // whether or not the row is the chosen one, and a chevron that is always
-                // there says so.
-                IntentPicker(intent: Binding(
-                    get: { model.annotation(annotation.id)?.intent ?? annotation.intent },
-                    set: { model.setIntent($0, for: annotation.id) }))
-                    .disabled(!editable)
-                    .help(refusal ?? "What is being asked for here — click to change it")
-                Spacer()
-                if let verdict = annotation.verdict {
-                    badge(verdict.title, colour: Color(hex: verdict.hex),
-                          help: annotation.verdictBy.map { "\(verdict.title) by \($0)" })
-                }
-                if annotation.status == .resolved {
-                    badge("Resolved", colour: .secondary, help: nil)
-                }
-            }
-
+            heading(annotation)
             quoted(annotation.anchor)
-
-            if selected && editable {
-                TextField(annotation.intent.prompt, text: noteBinding(annotation.id),
-                          axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .lineLimit(1...8)
-                    .focused($focused, equals: .note(annotation.id))
-            } else if !annotation.note.isEmpty {
-                Text(annotation.note)
-                    .font(.system(size: 12))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                // An annotation that needs no words is complete without them, and must
-                // not read as unfinished.
-                Text(annotation.intent.needsInstruction ? "Nothing written yet"
-                                                        : "No reason given")
-                    .font(.system(size: 12))
-                    .italic()
-                    .foregroundStyle(.tertiary)
-            }
-
-            HStack(spacing: 6) {
-                Text(annotation.author.isEmpty ? "Unsigned" : annotation.author)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if selected {
-                    // Agreeing or disagreeing with what was asked — a verdict on the
-                    // annotation, which is a different question from whether it has been
-                    // dealt with, and a different question from who wrote it: responding
-                    // to somebody is exactly what a second reviewer is for.
-                    //
-                    // Offered only while undecided. A verdict is final, so a control that
-                    // looked like it could change one would be lying about what it does.
-                    if !annotation.isDecided {
-                        ForEach(Verdict.allCases, id: \.self) { verdict in
-                            Button {
-                                model.decide(verdict, for: annotation.id)
-                            } label: {
-                                Image(systemName: verdict.symbol)
-                            }
-                            .foregroundStyle(.secondary)
-                            .help("\(verdict.verb) this — "
-                                  + (verdict == .approved
-                                     ? "agree it should be done"
-                                     : "say it should NOT be done; the export will tell the"
-                                       + " reader not to act on it")
-                                  + ". This cannot be undone.")
-                        }
-                        Divider().frame(height: 11)
-                    }
-                    // Resolving is open to anyone: it says the thing was dealt with, which
-                    // is a fact about the work rather than a change to what was said.
-                    if annotation.status == .open {
-                        Button("Resolve") { model.resolve(annotation.id) }
-                            .help("Mark as dealt with. It stays in the review, and the"
-                                  + " export lists it separately.")
-                    } else {
-                        Button("Reopen") { model.reopen(annotation.id) }
-                    }
-                    Button(role: .destructive) { model.delete(annotation.id) } label: {
-                        Image(systemName: "trash")
-                    }
-                    .disabled(!editable)
-                    .help(refusal ?? "Delete this annotation")
-                }
-            }
-            .controlSize(.small)
-            // On top of the stack's own 8. The footer carries the byline and the actions,
-            // and at 8 they sat close enough under the note to read as another line of it
-            // — buttons that look like part of the sentence above them.
-            .padding(.top, 6)
-            .modifier(RevealIfSelected(selected: selected))
+            body(annotation, selected: selected)
+            footer(annotation, selected: selected)
         }
         .padding(.leading, 13).padding(.trailing, 16).padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -332,6 +233,123 @@ struct AnnotationsPane: View {
         // row by the same route, so the two directions cannot mean different things.
         .onTapGesture { model.reveal(annotation.id) }
         .motion(.panel, value: selected)
+    }
+
+    /// The kind, and what has been decided about it.
+    private func heading(_ annotation: Annotation) -> some View {
+        let refusal = annotation.editingRefusal(for: model.author)
+        return HStack(spacing: 6) {
+            // ALWAYS the picker, selected or not.
+            //
+            // It used to be a plain label that became a menu when the row was chosen, with
+            // matched metrics on the label so nothing would move. That was not enough and
+            // could not be: a `Menu` restyles its own label — its control size, its font,
+            // its padding — so swapping one for the other moved the icon, changed the type
+            // size, and shifted the whole card. Matching two controls pixel for pixel is a
+            // losing game; having one control is not.
+            IntentPicker(intent: Binding(
+                get: { model.annotation(annotation.id)?.intent ?? annotation.intent },
+                set: { model.setIntent($0, for: annotation.id) }))
+                .disabled(!model.canEdit(annotation))
+                .help(refusal ?? "What is being asked for here — click to change it")
+            Spacer()
+            if let verdict = annotation.verdict {
+                badge(verdict.title, colour: Color(hex: verdict.hex),
+                      help: annotation.verdictBy.map { "\(verdict.title) by \($0)" })
+            }
+            if annotation.status == .resolved {
+                badge("Resolved", colour: .secondary, help: nil)
+            }
+        }
+    }
+
+    /// What was written, or a field to write it in.
+    @ViewBuilder
+    private func body(_ annotation: Annotation, selected: Bool) -> some View {
+        if selected && model.canEdit(annotation) {
+            TextField(annotation.intent.prompt, text: noteBinding(annotation.id),
+                      axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .lineLimit(1...8)
+                .focused($focused, equals: .note(annotation.id))
+        } else if !annotation.note.isEmpty {
+            Text(annotation.note)
+                .font(.system(size: 12))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            // An annotation that needs no words is complete without them, and must not
+            // read as unfinished.
+            Text(annotation.intent.needsInstruction ? "Nothing written yet" : "No reason given")
+                .font(.system(size: 12))
+                .italic()
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    /// Who wrote it, and — when it is the chosen row — what can be done about it.
+    private func footer(_ annotation: Annotation, selected: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(annotation.author.isEmpty ? "Unsigned" : annotation.author)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+            Spacer()
+            // The transition belongs to the CONTROLS, which really are inserted and
+            // removed. It used to wrap the whole footer through a modifier that branched
+            // on `selected` — and an `if`/`else` in a view builder gives the two branches
+            // different identities, so SwiftUI treated every selection as the footer being
+            // REPLACED and slid the author's name up and back down with it. Nothing about
+            // the name changed; it had no business moving.
+            if selected { actions(annotation).transition(.opacity) }
+        }
+        .controlSize(.small)
+        // On top of the stack's own 8. The footer carries the byline and the actions, and
+        // at 8 they sat close enough under the note to read as another line of it.
+        .padding(.top, 6)
+    }
+
+    @ViewBuilder
+    private func actions(_ annotation: Annotation) -> some View {
+        let refusal = annotation.editingRefusal(for: model.author)
+        // Agreeing or disagreeing with what was asked — a verdict on the annotation, which
+        // is a different question from whether it has been dealt with, and a different
+        // question from who wrote it: responding to somebody is exactly what a second
+        // reviewer is for.
+        //
+        // Offered only while undecided. A verdict is final, so a control that looked like
+        // it could change one would be lying about what it does.
+        if !annotation.isDecided {
+            ForEach(Verdict.allCases, id: \.self) { verdict in
+                Button {
+                    model.decide(verdict, for: annotation.id)
+                } label: {
+                    Image(systemName: verdict.symbol)
+                }
+                .foregroundStyle(.secondary)
+                .help("\(verdict.verb) this — "
+                      + (verdict == .approved
+                         ? "agree it should be done"
+                         : "say it should NOT be done; the export will tell the reader not"
+                           + " to act on it")
+                      + ". This cannot be undone.")
+            }
+            Divider().frame(height: 11)
+        }
+        // Resolving is open to anyone: it says the thing was dealt with, which is a fact
+        // about the work rather than a change to what was said.
+        if annotation.status == .open {
+            Button("Resolve") { model.resolve(annotation.id) }
+                .help("Mark as dealt with. It stays in the review, and the export lists it"
+                      + " separately.")
+        } else {
+            Button("Reopen") { model.reopen(annotation.id) }
+        }
+        Button(role: .destructive) { model.delete(annotation.id) } label: {
+            Image(systemName: "trash")
+        }
+        .disabled(!model.canEdit(annotation))
+        .help(refusal ?? "Delete this annotation")
     }
 
     /// What the annotation is about, in the reviewer's own view of it.
@@ -382,15 +400,6 @@ struct AnnotationsPane: View {
     private func noteBinding(_ id: UUID) -> Binding<String> {
         Binding(get: { model.annotation(id)?.note ?? "" },
                 set: { model.setNote($0, for: id) })
-    }
-}
-
-/// The controls a chosen row grows. Its own modifier so the transition is applied at one
-/// point and cannot drift between the two places rows are drawn.
-private struct RevealIfSelected: ViewModifier {
-    let selected: Bool
-    func body(content: Content) -> some View {
-        if selected { content.revealedRowTransition() } else { content }
     }
 }
 
