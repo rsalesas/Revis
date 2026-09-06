@@ -530,60 +530,80 @@
    * wide, and this is the whole of the difference between the two.
    *
    * WebKit lays the page out in another process, so a view whose width is animating gets a
-   * sheet that is a few frames behind — measured here at 130 points at the peak of a
-   * pane's travel, which is far more than any margin could absorb. Behind in the direction
-   * of GROWING is harmless: the sheet is smaller than the space it has, so it simply takes
-   * a moment to fill it. Behind in the direction of SHRINKING is the bug everyone could
-   * see: the sheet is wider than the view holding it, so its margin is clipped away and
-   * the white runs flush against the pane sliding in beside it.
+   * sheet that is behind — measured at 130 points at the peak of a pane's travel, which is
+   * far more than any margin could absorb. Behind in the direction of GROWING is harmless:
+   * the sheet is smaller than the space it has and takes a moment to fill it. Behind in the
+   * direction of SHRINKING is the bug everyone could see: the sheet is wider than the view
+   * holding it, so its margin is clipped away and the white runs flush against the pane
+   * sliding in beside it.
    *
-   * So when the app is about to take width off this view, it says so first, and the sheet
-   * gives it up in one step while nothing is moving yet. For the rest of the animation the
-   * sheet is a fixed piece of paper being re-centred — no reflow, nothing to wait for, and
-   * no way to be wider than the room it is in. It goes back to filling by layout when the
-   * pane has arrived, at which point the two widths are already the same number.
+   * So when the app is about to take width off this view it says so first, and the sheet
+   * eases to the new width ITSELF, here, with the same curve and beat the pane is using.
+   * The point is where the animation runs: a width the page animates is driven inside the
+   * web process, one frame after another with nothing to ask anybody, where following the
+   * view means a message and an answer per frame and the answer is always late.
    *
-   * The sheet stays CENTRED while it is held — its own `margin: 0 auto`, left alone. It
-   * was worth trying to pin it to the edge that is not moving, so that the words would not
-   * travel at all; that pins it to the body's content box instead, and the body is lagging
-   * by exactly as much as everything else here, so the sheet rode 24 points out over its
-   * own margin and sat flush against the pane for a tenth of a second. Centred it gives up
-   * half the width at each side and slides back, and the far edge only ever moves AWAY
-   * from the pane beside it. Motion nothing asked for is a much smaller fault than the one
-   * this whole exercise is about.
+   * The SAME duration, not a shorter one. Shortening it by a tenth was tried, on the
+   * argument that early is the safe direction to be wrong in — and it is, but the sheet is
+   * centred, so every point it leads by shows as HALF a point of the leading edge drifting
+   * out and walking back. A tenth measured 47 points of that. At the same duration the
+   * drift is 22, and the closest the sheet ever comes to the pane is six points of margin
+   * rather than none. Two small faults in opposite directions; this is the bottom of the
+   * curve between them.
    *
-   * `paint()` is skipped while held for the same reason: the marks are inside the sheet
-   * and move with it, so a repaint per resize frame is work that changes nothing and slows
-   * the process we are waiting on. */
+   * Taking the width in ONE STEP was tried before either, and was worse than the fault it
+   * fixed: half of a three-hundred point step comes off each side, so the leading edge
+   * jumped a hundred and fifty points out and then walked back in.
+   *
+   * `paint()` is skipped while held: the marks are inside the sheet and move with it, so a
+   * repaint per resize frame is work that changes nothing and slows the process being
+   * waited on. */
   window.rvHold = function (points) {
     var page = document.getElementById("rv-page");
     if (!page) return;
     if (holding) { clearTimeout(holding); holding = 0; }
     if (!fitting || !(points > 0)) { release(page); return; }
-    page.style.width = Math.max(200, page.offsetWidth - points) + "px";
+
+    var ms = panelMs();
+    var from = page.offsetWidth;
+    page.style.transition = "none";
+    page.style.width = from + "px";
+    void page.offsetWidth;              // the transition needs a start it has already had
+    page.style.transition = "width " + ms + "ms " + motionCurve();
+    page.style.width = Math.max(200, from - points) + "px";
+
     holding = setTimeout(function () {
       holding = 0;
       release(page);
-    }, panelMs() + 80);
+    }, ms + 120);
   };
 
-  /* Back to filling by layout — and through `rvSetZoom` rather than a bare repaint,
-     because a window resized while the sheet was held is a fit the app has not been told
-     about. */
+  /* Back to filling by layout — the width it has arrived at and the width layout would give
+     it are the same number by now, so there is nothing to see. Through `rvSetZoom` rather
+     than a bare repaint, because a window resized while the sheet was held is a fit the app
+     has not been told about. */
   function release(page) {
+    page.style.transition = "";
     page.style.width = "";
     if (fitting) window.rvSetZoom(0);
     else requestAnimationFrame(paint);
   }
 
-  /* The pane animation's own duration, read from the stylesheet rather than repeated here.
-     Swift mirrors `Motion.panel` into `--rv-motion-panel-duration`, so there is exactly one
-     place the beat is written down. */
+  /* The pane animation's own beat and curve, read from the stylesheet rather than repeated
+     here. Swift mirrors `Motion.panel` into these two properties, so there is exactly one
+     place either is written down. */
   function panelMs() {
-    var v = window.getComputedStyle(document.documentElement)
-      .getPropertyValue("--rv-motion-panel-duration");
-    var ms = parseFloat(v);
+    var ms = parseFloat(motionValue("--rv-motion-panel-duration"));
     return ms > 0 ? ms : 340;
+  }
+
+  function motionCurve() {
+    return motionValue("--rv-motion-panel") || "ease-in-out";
+  }
+
+  function motionValue(name) {
+    return window.getComputedStyle(document.documentElement)
+      .getPropertyValue(name).trim();
   }
 
   window.rvSetTool = function (name) {

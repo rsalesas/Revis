@@ -84,10 +84,16 @@ thing, which is where this started. It works because of two changes made much la
   is harmless — the sheet is smaller than its room and takes a moment to fill it. Behind
   while SHRINKING is the bug everybody could see: the sheet is wider than the view, so its
   margin is clipped off and the white runs flush against the pane sliding in beside it.
-  So on opening, the sheet drops to its final width in one step while nothing is moving,
-  and spends the animation as a rigid page being re-centred — no reflow, nothing to wait
-  for, and no way to be wider than the room it has. Closing needs no hold: growing late is
-  only a margin that fills in late.
+  So on opening the sheet EASES ITSELF to the new width, with the pane's own curve and
+  beat, as a CSS transition — which runs inside the web process, frame after frame, with
+  nothing to ask anybody. Closing needs no hold: growing late is only a margin that fills
+  in late.
+
+  Taking the width in one step instead was worse than the fault: the sheet is centred, so
+  half of a 300-point step comes off each side and the leading edge jumps 150 points out
+  and walks back. Shortening the sheet's transition to lead the pane trades the same fault
+  smaller — 47 points of drift at nine tenths, 22 at parity — against how close the sheet
+  comes to the pane. Parity is the bottom of that curve.
 
 - **`Motion.panel` starts slowly on purpose** — `cubic-bezier(0.65, 0, 0.35, 1)` over
   340 ms, not the hard ease-out it was. The old curve covered two thirds of the distance in
