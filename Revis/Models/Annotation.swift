@@ -77,7 +77,7 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
     var directive: String {
         switch self {
         case .change:   return "Rewrite the quoted text."
-        case .insert:   return "Insert new content at this point."
+        case .insert:   return "Insert new content immediately AFTER the quoted text."
         case .remove:   return "Delete the quoted text."
         case .move:     return "Relocate the quoted text."
         case .question: return "Answer this question about the quoted text."
@@ -86,12 +86,19 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Whether an annotation of this kind is asking for an edit. Approvals and notes are
-    /// not, which is what lets the export separate "do this" from "know this".
-    var isRequest: Bool {
+    /// Which part of the export an annotation of this kind belongs in.
+    ///
+    /// Three, not two. Questions used to be filed under requested changes, and a model
+    /// applying the review said so: an item headed "Requested changes" that asks for no
+    /// change, and whose answer has nowhere to go, reads as an edit it cannot work out how
+    /// to make. A question is neither an edit nor an observation; it is a question.
+    enum Bucket { case edit, question, observation }
+
+    var bucket: Bucket {
         switch self {
-        case .change, .insert, .remove, .move, .question: return true
-        case .approve, .note: return false
+        case .change, .insert, .remove, .move: return .edit
+        case .question: return .question
+        case .approve, .note: return .observation
         }
     }
 }

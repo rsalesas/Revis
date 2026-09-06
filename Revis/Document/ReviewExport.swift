@@ -31,15 +31,17 @@ enum ReviewExport {
     static func markdown(_ file: ReviewFile, filter: AnnotationFilter = .open) -> String {
         let ordered = file.annotations.inDocumentOrder()
         let visible = ordered.filter { filter.admits($0) }
-        let requests = visible.filter { $0.intent.isRequest && $0.status == .open }
-        let observations = visible.filter { !$0.intent.isRequest && $0.status == .open }
+        let open = visible.filter { $0.status == .open }
+        let requests = open.filter { $0.intent.bucket == .edit }
+        let questions = open.filter { $0.intent.bucket == .question }
+        let observations = open.filter { $0.intent.bucket == .observation }
         let resolved = ordered.filter { $0.status == .resolved }
 
         var out = "# Review of \(file.document.title ?? file.source.name)\n\n"
-        out += preamble(file, requests: requests.count, observations: observations.count,
-                        resolved: resolved.count)
+        out += preamble(file, requests: requests.count, questions: questions.count,
+                        observations: observations.count, resolved: resolved.count)
 
-        if requests.isEmpty && observations.isEmpty {
+        if requests.isEmpty && questions.isEmpty && observations.isEmpty {
             out += "\n## Nothing outstanding\n\nNo changes are requested.\n"
             return out + resolvedSection(resolved, includeIn: filter)
         }
@@ -50,13 +52,23 @@ enum ReviewExport {
                 out += item(annotation, number: index + 1)
             }
         }
+        if !questions.isEmpty {
+            out += "\n## Questions\n\n"
+            out += "These ask for an ANSWER, not an edit. Do not change the document to"
+                + " satisfy one: reply to the reviewer. If answering reveals that the"
+                + " document is wrong, say so rather than quietly correcting it.\n"
+            for (index, annotation) in questions.enumerated() {
+                out += item(annotation, number: requests.count + index + 1)
+            }
+        }
         if !observations.isEmpty {
             out += "\n## Observations\n\n"
             out += "No change is requested for these. They are recorded so the document's"
                 + " intent is not lost — in particular, anything marked **Approve** should"
                 + " be left as it stands.\n"
             for (index, annotation) in observations.enumerated() {
-                out += item(annotation, number: requests.count + index + 1)
+                out += item(annotation,
+                            number: requests.count + questions.count + index + 1)
             }
         }
         return out + resolvedSection(resolved, includeIn: filter)
@@ -67,14 +79,18 @@ enum ReviewExport {
     /// Worth the words: without them a reader is left to guess whether "block 14" or the
     /// quoted string is authoritative, and it will guess wrong on a regenerated document —
     /// silently, and in a way that puts an edit in the wrong place.
-    private static func preamble(_ file: ReviewFile, requests: Int,
+    private static func preamble(_ file: ReviewFile, requests: Int, questions: Int,
                                  observations: Int, resolved: Int) -> String {
         var lines: [String] = []
+        // The WHOLE digest. It was printed truncated, which is the same as not printing
+        // it: a reader cannot check that the document in front of it is the one the review
+        // was written against, which is the only thing a digest is for.
         lines.append("**Source** `\(file.source.name)`"
             + (file.source.digest.isEmpty ? ""
-               : "  ·  SHA-256 `\(file.source.digest.prefix(16))…`"))
+               : "  ·  SHA-256 `\(file.source.digest)`"))
         lines.append("**Captured** \(Self.formatter.string(from: file.source.capturedAt))")
         var counts = ["\(requests) requested change\(requests == 1 ? "" : "s")"]
+        if questions > 0 { counts.append("\(questions) question\(questions == 1 ? "" : "s")") }
         if observations > 0 { counts.append("\(observations) observation\(observations == 1 ? "" : "s")") }
         if resolved > 0 { counts.append("\(resolved) resolved") }
         lines.append("**Contents** " + counts.joined(separator: ", "))
@@ -82,13 +98,28 @@ enum ReviewExport {
         return lines.joined(separator: "  \n") + """
 
 
-        > **How to apply this review.** Each item names an operation, the exact text it
-        > applies to, and the instruction. **Locate every item by searching for the quoted
-        > text**, not by position: the section paths and block numbers describe the
-        > document as it was when it was reviewed, and will not survive it being
-        > rewritten. Where a quote is short or occurs more than once, the surrounding words
-        > are given under *Context* — the marked span is written between `«` and `»`.
-        > Apply the items in the order given; they are in document order.
+        > **How to apply this review.**
+        >
+        > 1. **Locate every item by searching for the quoted text**, not by position. The
+        >    section paths and block numbers describe the document as it was reviewed; they
+        >    can be imprecise about a target's structural type even now, and will not
+        >    survive the document being rewritten. **The quoted text is the anchor; the
+        >    path is a hint.**
+        > 2. **Quotes are whitespace-normalised** — runs of spaces and newlines are
+        >    collapsed to one space — because that is how the text reads on screen. A
+        >    document whose source wraps mid-sentence will not match a quote byte for byte;
+        >    compare on normalised whitespace.
+        > 3. Where a quote is short or occurs more than once, the surrounding words are
+        >    given under *Context*, with the marked span between `«` and `»`. Use it: some
+        >    quotes occur several times on purpose.
+        > 4. **Apply the items in the order given.** They are in document order, and a later
+        >    item may depend on an earlier one having been made.
+        > 5. Where an instruction describes what to write rather than giving the words,
+        >    draft it — and **say in your reply that you drafted it**, so the reviewer knows
+        >    which words are theirs and which are yours.
+        > 6. Correcting a fact does not authorise correcting every other mention of it. If
+        >    an edit leaves the document inconsistent elsewhere, **report that rather than
+        >    silently propagating it**.
 
 
         """
@@ -102,7 +133,9 @@ enum ReviewExport {
             let count = annotation.anchor.blocks.count
             let subject = count == 1 ? "block" : "\(count) blocks"
             out += "**Applies to** the \(subject) the reviewer drew a box around, whose"
-                + " text is:\n\n"
+                + " text is quoted below. A box is a coarse anchor — the instruction may"
+                + " narrow it to part of what it covers, so read the instruction before"
+                + " deciding how much to change.\n\n"
         } else if annotation.anchor.start < 0 {
             out += "**Applies to** this whole \(annotation.anchor.role):\n\n"
         } else {

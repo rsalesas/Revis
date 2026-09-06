@@ -100,7 +100,9 @@ struct ReviewView: View {
             onAnchor: { model.receive(anchor: $0) },
             onZoom: { model.receive(zoom: $0) },
             onFit: { model.receive(fit: $0) },
-            onRegion: { model.openDraft(on: $0, intent: appSettings.defaultIntent) })
+            // No intent passed: the model knows the default. Handing it in here was how
+            // the two paths came to disagree.
+            onRegion: { model.openDraft(on: $0) })
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

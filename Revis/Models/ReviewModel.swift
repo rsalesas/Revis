@@ -93,6 +93,14 @@ final class ReviewModel: ObservableObject {
     /// Who new annotations are signed by.
     let author: String
 
+    /// What a new annotation starts as.
+    ///
+    /// Read once, into the window, rather than reached for at each call site — which is
+    /// how it came to be honoured for a dragged region and ignored for selected text: the
+    /// region path passed the preference in and the text path used the parameter's
+    /// hard-coded default, so the setting silently did nothing for the commoner of the two.
+    let defaultIntent: Intent
+
     private var draftCounter = 0
 
     init(file: ReviewFile, appSettings: AppSettings) {
@@ -100,6 +108,7 @@ final class ReviewModel: ObservableObject {
         prepared = file.document
         annotations = file.annotations
         author = appSettings.reviewerName
+        defaultIntent = appSettings.defaultIntent
         annotationsVisible = appSettings.lastAnnotationsVisible
         inspectorVisible = appSettings.lastInspectorVisible
         useDocumentStyle = appSettings.useDocumentStyle
@@ -235,10 +244,11 @@ final class ReviewModel: ObservableObject {
         openDraft(on: anchor)
     }
 
-    func openDraft(on anchor: Anchor, intent: Intent = .change) {
+    func openDraft(on anchor: Anchor, intent: Intent? = nil) {
         draftCounter &+= 1
         selectedID = nil
-        draft = AnnotationDraft(anchor: anchor, intent: intent, token: draftCounter)
+        draft = AnnotationDraft(anchor: anchor, intent: intent ?? defaultIntent,
+                                token: draftCounter)
     }
 
     func commitDraft() {

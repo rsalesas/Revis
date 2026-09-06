@@ -182,7 +182,7 @@ struct AnnotationsPane: View {
                     .disabled(!canCommit(draft))
             }
             .controlSize(.small)
-            .padding(.top, 2)
+            .padding(.top, 6)
         }
         .padding(.leading, 13).padding(.trailing, 16).padding(.vertical, 12)
         .background(alignment: .leading) { bar(AnnotationPalette.color(for: draft.intent)) }
@@ -206,15 +206,21 @@ struct AnnotationsPane: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                if selected {
-                    IntentPicker(intent: Binding(
-                        get: { model.annotation(annotation.id)?.intent ?? annotation.intent },
-                        set: { model.setIntent($0, for: annotation.id) }))
-                } else {
-                    // The same metrics as the picker's own label, so nothing moves when
-                    // the row is chosen and one is swapped for the other.
-                    IntentLabel(intent: annotation.intent)
-                }
+                // ALWAYS the picker, selected or not.
+                //
+                // It used to be a plain label that became a menu when the row was chosen,
+                // with matched metrics on the label so nothing would move. That was not
+                // enough and could not be: a `Menu` restyles its own label — its control
+                // size, its font, its padding — so swapping one for the other moved the
+                // icon, changed the type size, and shifted the whole card. Matching two
+                // controls pixel for pixel is a losing game; having one control is not.
+                //
+                // It is also the truer interface. An annotation's intent can be changed
+                // whether or not the row is the chosen one, and a chevron that is always
+                // there says so.
+                IntentPicker(intent: Binding(
+                    get: { model.annotation(annotation.id)?.intent ?? annotation.intent },
+                    set: { model.setIntent($0, for: annotation.id) }))
                 Spacer()
                 if annotation.status == .resolved {
                     Text("Resolved")
@@ -269,6 +275,10 @@ struct AnnotationsPane: View {
                 }
             }
             .controlSize(.small)
+            // On top of the stack's own 8. The footer carries the byline and the actions,
+            // and at 8 they sat close enough under the note to read as another line of it
+            // — buttons that look like part of the sentence above them.
+            .padding(.top, 6)
             .modifier(RevealIfSelected(selected: selected))
         }
         .padding(.leading, 13).padding(.trailing, 16).padding(.vertical, 12)
@@ -348,23 +358,32 @@ private struct RevealIfSelected: ViewModifier {
 private struct IntentLabel: View {
     let intent: Intent
 
-    /// Wide enough for "Question", the longest of the seven at this size. Measured by
-    /// eye and then given a point of slack, because a name that just fits is a name that
-    /// clips on the first system font change.
+    /// Wide enough for "Question", the longest of the seven at this size, with a point of
+    /// slack — a name that just fits is a name that clips on the first system font change.
     static let titleWidth: CGFloat = 54
-    static let iconSide: CGFloat = 13
+    static let iconSide: CGFloat = 14
+    /// The whole label, stated outright. See below for why a fixed width on each half was
+    /// not enough.
+    static let width: CGFloat = iconSide + 4 + titleWidth
 
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: intent.symbol)
                 .font(.system(size: 10, weight: .semibold))
-                // A square, and centred in it: the frame is what makes every symbol
-                // occupy the same space whatever shape it is.
+                // A square, centred, AND clipped. The frame alone was not enough: it sets
+                // the layout size but lets a wide glyph — `pencil.line`, `text.insert` —
+                // paint outside it, and a `Menu` measures what its label paints. So the
+                // seven intents produced menus three points apart and the control moved as
+                // you changed it. Clipping makes the painted box the laid-out box.
                 .frame(width: Self.iconSide, height: Self.iconSide)
+                .clipped()
             Text(intent.title)
                 .font(.system(size: 10, weight: .semibold))
+                .lineLimit(1)
                 .frame(width: Self.titleWidth, alignment: .leading)
         }
+        // Belt and braces: whatever the two halves do, the label is this wide.
+        .frame(width: Self.width, alignment: .leading)
         .foregroundStyle(AnnotationPalette.color(for: intent))
     }
 }
@@ -392,7 +411,14 @@ struct IntentPicker: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.visible)
+        // Every one of these is pinning something a `Menu` would otherwise decide for
+        // itself, and each was a way the label moved: the control size sets the chevron's
+        // size and the label's padding, the font is inherited by the label unless it is
+        // stated, and `fixedSize` stops the menu claiming whatever width is going.
+        .controlSize(.small)
+        .font(.system(size: 10, weight: .semibold))
+        .imageScale(.small)
         .fixedSize()
-        .help("What is being asked for here")
+        .help("What is being asked for here — click to change it")
     }
 }

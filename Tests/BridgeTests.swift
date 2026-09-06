@@ -73,3 +73,61 @@ struct BridgeTests {
         }
     }
 }
+
+/// The per-window model's own rules.
+@MainActor
+struct ReviewModelTests {
+
+    private func model(defaultIntent: Intent) -> ReviewModel {
+        let defaults = UserDefaults(suiteName: "app.revis.tests.\(UUID().uuidString)")!
+        let settings = AppSettings(defaults: defaults)
+        settings.defaultIntent = defaultIntent
+        let file = ReviewFile(
+            source: SourceInfo(name: "s", path: nil, capturedAt: .reviewStamp, digest: ""),
+            document: .empty)
+        return ReviewModel(file: file, appSettings: settings)
+    }
+
+    private var anchor: Anchor {
+        Anchor(blocks: [0], path: "", role: "paragraph", quote: "hello",
+               prefix: "", suffix: "", start: 0, end: 5, rect: nil)
+    }
+
+    /// The preference has to reach BOTH ways of making an annotation. It reached one:
+    /// a dragged region honoured it and selected text did not, because the region call
+    /// site passed it in and the text one fell through to a hard-coded default.
+    @Test func aNewAnnotationStartsAtThePreferredIntent() {
+        for intent in Intent.allCases {
+            let model = model(defaultIntent: intent)
+            model.openDraft(on: anchor)
+            #expect(model.draft?.intent == intent)
+        }
+    }
+
+    /// An approval is complete without words; nothing else is, or the export would carry
+    /// an operation with no instruction attached to it.
+    @Test func onlyAnApprovalCanBeCommittedEmpty() {
+        let model = model(defaultIntent: .change)
+        model.openDraft(on: anchor)
+        model.commitDraft()
+        #expect(model.annotations.isEmpty)
+
+        model.draft?.intent = .approve
+        model.commitDraft()
+        #expect(model.annotations.count == 1)
+    }
+
+    /// Resolving keeps the annotation — a review records that a thing was dealt with, not
+    /// that it never happened.
+    @Test func resolvingDoesNotDelete() {
+        let model = model(defaultIntent: .change)
+        model.openDraft(on: anchor)
+        model.draft?.note = "please"
+        model.commitDraft()
+        let id = try! #require(model.annotations.first?.id)
+        model.resolve(id)
+        #expect(model.annotations.count == 1)
+        #expect(model.annotations.first?.status == .resolved)
+        #expect(model.visibleAnnotations.isEmpty)   // the pane defaults to Open
+    }
+}
