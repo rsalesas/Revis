@@ -25,6 +25,8 @@
   --rv-motion-panel-duration: 240ms;
   --rv-motion-hover: cubic-bezier(0, 0, 0.58, 1);
   --rv-motion-hover-duration: 120ms;
+  --rv-motion-reveal: cubic-bezier(0, 0, 0.58, 1);
+  --rv-motion-reveal-duration: 180ms;
 }
 
 /* The sheet stays paper-white whatever the system appearance is.
@@ -71,20 +73,21 @@ body {
   position: relative;
   width: 920px;
   margin: 0 auto;
-  /* Ease the zoom rather than cutting to it.
+  /* Ease the zoom over exactly the pane's own beat, with exactly its curve.
    *
-   * A pane animating its width resizes the web view, and the resize arrives as a coarse,
-   * front-loaded stream — the first sample of an opening pane lands about half way
-   * through, so the first refit is one big step. Add WebKit's own repaint latency and the
-   * result reads as a snap when the document is SHRINKING and as a harmless gap when it is
-   * growing: stale content that is too wide gets clipped, stale content that is too narrow
-   * just leaves a margin for a frame.
+   * This is the last piece, and it is what Vaelora does. The web view is now handed its
+   * final width in one step — no per-frame resizing, see `CollapsiblePane` — so the page
+   * knows where it is going immediately. Cutting to it means the document jumps to its new
+   * size while the pane is still a quarter of a second from arriving. Easing over the same
+   * duration and the same curve means the two move together, and what you watch is one
+   * thing changing shape rather than two things disagreeing about when.
    *
-   * A short transition smooths the steps into each other and covers the latency. Shorter
-   * than the pane's own quarter-second on purpose: this is following a movement, not
-   * performing one, and a transition as long as the thing it is chasing would still be
-   * arriving after the pane had stopped. */
-  transition: zoom 120ms cubic-bezier(0.32, 0.72, 0, 1);
+   * Cheap, because the sheet is a fixed measure: the document is laid out at 920 points
+   * whatever the zoom, so this scales a finished picture rather than reflowing text.
+   *
+   * The duration and the curve are `Motion.panel`, which is also what the pane animates
+   * with. `MotionTests` fails if the two drift apart. */
+  transition: zoom var(--rv-motion-panel-duration) var(--rv-motion-panel);
 }
 
 /* Not while the reviewer is stepping the zoom themselves: pressing + should change the

@@ -265,3 +265,29 @@ struct InsertionPointTests {
         #expect(markdown.contains("Insert new content immediately AFTER the quoted text."))
     }
 }
+
+/// The page and the panes move on the same beat, or they read as two things disagreeing
+/// about when. The stylesheet holds its own copy of the tokens, so the two are checked.
+@MainActor
+struct MotionTests {
+
+    private var stylesheet: String { DocumentShell.bundleString(named: "review", ext: "css") }
+
+    @Test func theStylesheetHoldsEveryCrossBoundaryToken() {
+        for token in Motion.crossBoundary {
+            guard let curve = token.curve else { continue }
+            // Both halves of every token that crosses into the stylesheet: a curve that
+            // matches with a duration that does not is still two things moving apart.
+            #expect(stylesheet.contains("\(token.cssCurveProperty): \(curve.cssValue)"))
+            #expect(stylesheet.contains("\(token.cssDurationProperty): \(token.cssDurationValue)"))
+        }
+    }
+
+    /// The document eases to its new size over the PANE's beat — not a number typed beside
+    /// it, which is how the two come to drift apart.
+    @Test func theSheetEasesOnThePanelToken() {
+        #expect(stylesheet.contains(
+            "transition: zoom var(\(Motion.panel.cssDurationProperty))"
+                + " var(\(Motion.panel.cssCurveProperty))"))
+    }
+}
