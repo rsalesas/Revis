@@ -34,6 +34,11 @@ struct DocumentWebView: NSViewRepresentable {
     /// The zoom to apply; zero asks the page to work out what fits.
     var requestedZoom: Double
     var zoomToken: Int
+    /// Width the document is about to lose, in points, and the token that pushes it. See
+    /// `rvHold` in review.js: the sheet has to give the room up before the pane takes it.
+    var pageHold: CGFloat
+    var pageHoldToken: Int
+
     /// Bumped to scroll to `currentMark`.
     var revealToken: Int
     var revealBlock: Int?
@@ -132,6 +137,12 @@ struct DocumentWebView: NSViewRepresentable {
             c.run("window.rvSelect && window.rvSelect(\(jsQuoted(currentMark)));"
                 + "window.rvSetAnnotations && window.rvSetAnnotations(\(jsQuoted(annotations)));")
         }
+        // Before the zoom, and before anything else that could make the page lay out: the
+        // point of the hold is that it lands while the view is still its old size.
+        if c.lastPageHoldToken != pageHoldToken {
+            c.lastPageHoldToken = pageHoldToken
+            c.run("window.rvHold && window.rvHold(\(pageHold));")
+        }
         if c.lastZoomToken != zoomToken {
             c.lastZoomToken = zoomToken
             c.pendingZoom = requestedZoom
@@ -168,6 +179,7 @@ struct DocumentWebView: NSViewRepresentable {
         var lastTool: ReviewTool?
         var lastCaptureToken = 0
         var lastZoomToken = 0
+        var lastPageHoldToken = 0
         var pendingZoom: Double = 0
         var lastRevealToken = 0
         var lastRevealBlockToken = 0

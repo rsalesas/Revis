@@ -69,14 +69,37 @@ not put that `try?` back.
 ## The pane toggle (settled, after a great many wrong turns)
 
 Toggling a side pane animates the slot's width, and the document follows it — the plain
-thing, which is where this started. It only works because of one change made much later:
+thing, which is where this started. It works because of two changes made much later:
 
 - **The fitted sheet fills by LAYOUT** (`body.rv-fitting #rv-page { width: auto }`), not by
-  a `zoom` that JavaScript sets. That is the whole of it. Script-driven sizing arrives a
-  process and a resize event later — 30-35 ms, measured — so on every frame of an animating
-  width the sheet was sized for the width before last: wider than the view, clipped, text
-  running under the pane. Filling by layout happens in the reflow WebKit already performs,
-  with nothing to wait for and nobody to tell.
+  a `zoom` that JavaScript sets. Script-driven sizing arrives a process and a resize event
+  later — 30-35 ms, measured — so on every frame of an animating width the sheet was sized
+  for the width before last. Filling by layout happens in the reflow WebKit already
+  performs, with nothing to wait for and nobody to tell.
+
+- **The sheet is told to give the room up BEFORE the pane takes it** (`rvHold`, review.js;
+  every route to a pane goes through `ReviewModel.setPane`). Filling by layout is still a
+  reflow in another process, and a reflow in another process is behind: measured at 130
+  points at the peak of a pane's travel, which no margin can absorb. Behind while GROWING
+  is harmless — the sheet is smaller than its room and takes a moment to fill it. Behind
+  while SHRINKING is the bug everybody could see: the sheet is wider than the view, so its
+  margin is clipped off and the white runs flush against the pane sliding in beside it.
+  So on opening, the sheet drops to its final width in one step while nothing is moving,
+  and spends the animation as a rigid page being re-centred — no reflow, nothing to wait
+  for, and no way to be wider than the room it has. Closing needs no hold: growing late is
+  only a margin that fills in late.
+
+- **`Motion.panel` starts slowly on purpose** — `cubic-bezier(0.65, 0, 0.35, 1)` over
+  340 ms, not the hard ease-out it was. The old curve covered two thirds of the distance in
+  the first sixty milliseconds, which is faster than WebKit can repaint a reflowing
+  document however the sizing is done; the document translated with the pane and then
+  snapped. The gentle start is what the growing direction has instead of a hold.
+
+Measured, not guessed, and the instrument is worth keeping: `screencapture -x -v -V 5 -D 1
+out.mp4` records the screen at ~50 fps, `ffmpeg -i out.mp4 -vsync 0 f/%04d.png` cuts it into
+frames, and a dozen lines of PIL reading one scanline gives the sheet's left and right edge
+per frame. Two numbers settle every argument here: the edge AWAY from the moving pane must
+not move, and the gap between the sheet and the pane must never fall below the gutter.
 
 Three shapes were tried before that and each was worse; do not reach for them again:
 

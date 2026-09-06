@@ -84,13 +84,13 @@ struct RevisCommands: Commands {
 
         CommandGroup(before: .toolbar) {
             Button("Show Annotations") {
-                if let review { withMotion(.panel) { review.annotationsVisible.toggle() } }
+                if let review { withMotion(.panel) { review.togglePane(.annotations) } }
             }
             .keyboardShortcut("1", modifiers: [.command, .option])
             .disabled(review == nil)
 
             Button("Show Inspector") {
-                if let review { withMotion(.panel) { review.inspectorVisible.toggle() } }
+                if let review { withMotion(.panel) { review.togglePane(.outline) } }
             }
             .keyboardShortcut("0", modifiers: [.command, .option])
             .disabled(review == nil)

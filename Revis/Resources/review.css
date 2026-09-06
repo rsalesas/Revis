@@ -17,12 +17,17 @@
   --rv-shadow: rgba(0, 0, 0, 0.16);
   --rv-gutter-width: 38px;
   /* The space round the sheet. One number, used by the stylesheet and measured by the
-     runtime, so the top and the sides cannot drift apart. */
+     runtime, so the top and the sides cannot drift apart.
+
+     It was widened to 48px for a while, to try to absorb the lag a resizing sheet shows
+     against the pane beside it. It absorbed none of it — the lag is 130 points at the peak
+     of a pane's travel, not 24 — and the answer turned out to be `rvHold` in review.js
+     rather than a wider margin. Left at 24 so the sheet is sized by how it should look. */
   --rv-gutter: 24px;
   /* Mirrors `Motion.panel` in Swift. The two are the same curve on purpose: a mark
      settling on the page and a pane taking width off it are the same app moving. */
-  --rv-motion-panel: cubic-bezier(0.32, 0.72, 0, 1);
-  --rv-motion-panel-duration: 240ms;
+  --rv-motion-panel: cubic-bezier(0.65, 0, 0.35, 1);
+  --rv-motion-panel-duration: 340ms;
   --rv-motion-hover: cubic-bezier(0, 0, 0.58, 1);
   --rv-motion-hover-duration: 120ms;
   --rv-motion-reveal: cubic-bezier(0, 0, 0.58, 1);

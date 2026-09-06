@@ -44,10 +44,17 @@ struct Motion: Equatable, Sendable {
         animation: .timingCurve(0, 0, 0.58, 1, duration: 0.18))
 
     /// Structural movement — a pane taking width from the document, a row growing to hold
-    /// its controls. Decelerating hard at the end, so a panel settles rather than stopping.
+    /// its controls.
+    ///
+    /// It EASES IN as well as out, and that is not a taste. This curve was
+    /// `cubic-bezier(0.32, 0.72, 0, 1)` over 240ms — a hard decelerate, which puts two
+    /// thirds of the travel in the first sixty milliseconds. A document being relaid out in
+    /// another process cannot follow that: it lagged, translated with the pane and then
+    /// snapped, measured at 130 points out of true. A pane is attached to something that
+    /// has to keep up with it, so it may not leave faster than that thing can move.
     static let panel = Motion(
-        name: "panel", duration: 0.24, curve: Curve(0.32, 0.72, 0, 1),
-        animation: .timingCurve(0.32, 0.72, 0, 1, duration: 0.24))
+        name: "panel", duration: 0.34, curve: Curve(0.65, 0, 0.35, 1),
+        animation: .timingCurve(0.65, 0, 0.35, 1, duration: 0.34))
 
     /// Rolling numerals and control state. A trace of bounce so a changing count reads as
     /// *changed* rather than redrawn.

@@ -59,6 +59,7 @@
   var reported = -1;       // the last zoom the app was told about
   var selectedID = "";
   var tool = "select";
+  var holding = 0;         // a setTimeout id while the sheet is pinned for a pane animation
   var ranges = {};         // annotation id -> Range, for hit-testing a click
 
   function post(name, payload) {
@@ -525,6 +526,66 @@
     return Math.max(0, el.clientWidth - left - right);
   }
 
+  /* The sheet is allowed to be too NARROW for a moment. It is never allowed to be too
+   * wide, and this is the whole of the difference between the two.
+   *
+   * WebKit lays the page out in another process, so a view whose width is animating gets a
+   * sheet that is a few frames behind — measured here at 130 points at the peak of a
+   * pane's travel, which is far more than any margin could absorb. Behind in the direction
+   * of GROWING is harmless: the sheet is smaller than the space it has, so it simply takes
+   * a moment to fill it. Behind in the direction of SHRINKING is the bug everyone could
+   * see: the sheet is wider than the view holding it, so its margin is clipped away and
+   * the white runs flush against the pane sliding in beside it.
+   *
+   * So when the app is about to take width off this view, it says so first, and the sheet
+   * gives it up in one step while nothing is moving yet. For the rest of the animation the
+   * sheet is a fixed piece of paper being re-centred — no reflow, nothing to wait for, and
+   * no way to be wider than the room it is in. It goes back to filling by layout when the
+   * pane has arrived, at which point the two widths are already the same number.
+   *
+   * The sheet stays CENTRED while it is held — its own `margin: 0 auto`, left alone. It
+   * was worth trying to pin it to the edge that is not moving, so that the words would not
+   * travel at all; that pins it to the body's content box instead, and the body is lagging
+   * by exactly as much as everything else here, so the sheet rode 24 points out over its
+   * own margin and sat flush against the pane for a tenth of a second. Centred it gives up
+   * half the width at each side and slides back, and the far edge only ever moves AWAY
+   * from the pane beside it. Motion nothing asked for is a much smaller fault than the one
+   * this whole exercise is about.
+   *
+   * `paint()` is skipped while held for the same reason: the marks are inside the sheet
+   * and move with it, so a repaint per resize frame is work that changes nothing and slows
+   * the process we are waiting on. */
+  window.rvHold = function (points) {
+    var page = document.getElementById("rv-page");
+    if (!page) return;
+    if (holding) { clearTimeout(holding); holding = 0; }
+    if (!fitting || !(points > 0)) { release(page); return; }
+    page.style.width = Math.max(200, page.offsetWidth - points) + "px";
+    holding = setTimeout(function () {
+      holding = 0;
+      release(page);
+    }, panelMs() + 80);
+  };
+
+  /* Back to filling by layout — and through `rvSetZoom` rather than a bare repaint,
+     because a window resized while the sheet was held is a fit the app has not been told
+     about. */
+  function release(page) {
+    page.style.width = "";
+    if (fitting) window.rvSetZoom(0);
+    else requestAnimationFrame(paint);
+  }
+
+  /* The pane animation's own duration, read from the stylesheet rather than repeated here.
+     Swift mirrors `Motion.panel` into `--rv-motion-panel-duration`, so there is exactly one
+     place the beat is written down. */
+  function panelMs() {
+    var v = window.getComputedStyle(document.documentElement)
+      .getPropertyValue("--rv-motion-panel-duration");
+    var ms = parseFloat(v);
+    return ms > 0 ? ms : 340;
+  }
+
   window.rvSetTool = function (name) {
     tool = name === "region" ? "region" : "select";
     document.documentElement.setAttribute("data-rv-tool", tool);
@@ -908,6 +969,8 @@
      * only the marks need moving. That stays debounced. */
     var pending = 0;
     window.addEventListener("resize", function () {
+      // Held, the sheet has already been given its answer and the marks travel with it.
+      if (holding) return;
       if (fitting) {
         window.rvSetZoom(0);
         return;

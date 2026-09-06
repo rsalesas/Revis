@@ -25,6 +25,23 @@ struct AnnotationDraft: Equatable {
     var token: Int
 }
 
+/// A side pane, and how wide it is.
+///
+/// The width lives here rather than in the view because two things need the same number:
+/// the layout, which gives the pane that much room, and the model, which has to tell the
+/// document how much room it is about to lose. Two copies of a width is two chances to say
+/// different ones, and the symptom would be a sheet that is very slightly wrong for the
+/// length of every animation.
+enum Pane {
+    case outline, annotations
+
+    var width: CGFloat { self == .outline ? 260 : 300 }
+
+    @MainActor func isOpen(_ model: ReviewModel) -> Bool {
+        self == .outline ? model.inspectorVisible : model.annotationsVisible
+    }
+}
+
 /// One review window's state.
 ///
 /// Per window, not shared: two reviews open at once have their own tool, their own
@@ -56,6 +73,12 @@ final class ReviewModel: ObservableObject {
     @Published var tool: ReviewTool = .select
     @Published var annotationsVisible: Bool
     @Published var inspectorVisible: Bool
+    /// Points the document is about to lose, and a token so the same number twice still
+    /// reaches the page. Pushed as `rvHold` — see the comment there; the short version is
+    /// that a sheet which finds out late that it has less room is a sheet that spends the
+    /// animation clipped against the pane taking the room.
+    @Published private(set) var pageHold: CGFloat = 0
+    @Published private(set) var pageHoldToken = 0
     @Published var inspectorTab: InspectorTab = .outline
     /// Whether the reviewer has text selected in the document. Reported by the runtime, so
     /// Add can be disabled rather than offered and then refused.
@@ -302,9 +325,31 @@ final class ReviewModel: ObservableObject {
         // marking something, they did not mean that.
         //
         // Set plainly rather than inside `withMotion`: the split animates on this value
-        // changing (see `CollapsibleSidePane`), so the pane slides in either way, and the
+        // changing (see `CollapsiblePane`), so the pane slides in either way, and the
         // model has no business knowing how the view animates.
-        annotationsVisible = true
+        setPane(.annotations, open: true)
+    }
+
+    /// Open or close a side pane.
+    ///
+    /// Every route to a pane comes through here — the toolbar, the menu, and the model's
+    /// own "you just annotated something, you will want to see it". Opening one has to
+    /// warn the document first, and a warning that four call sites have to remember is a
+    /// warning three of them will eventually forget.
+    func setPane(_ pane: Pane, open: Bool) {
+        guard pane.isOpen(self) != open else { return }
+        if open {
+            pageHold = pane.width
+            pageHoldToken += 1
+        }
+        switch pane {
+        case .outline: inspectorVisible = open
+        case .annotations: annotationsVisible = open
+        }
+    }
+
+    func togglePane(_ pane: Pane) {
+        setPane(pane, open: !pane.isOpen(self))
     }
 
     func commitDraft() {
@@ -386,7 +431,7 @@ final class ReviewModel: ObservableObject {
     /// you about where you are.
     func select(_ id: UUID) {
         selectedID = id
-        annotationsVisible = true
+        setPane(.annotations, open: true)
     }
 
     /// Choose an annotation from the PANE, and take the document to it — here the mark is

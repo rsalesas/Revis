@@ -48,11 +48,6 @@ struct ReviewView: View {
         }
     }
 
-    /// The pane widths, named once: the layout uses them and `prefit` has to say the same
-    /// numbers, and two copies of a width is two chances to say different ones.
-    static let inspectorWidth: CGFloat = 260
-    static let annotationsWidth: CGFloat = 300
-
     @ViewBuilder private var content: some View {
         if model.isEmpty {
             EmptyReviewView()
@@ -75,12 +70,12 @@ struct ReviewView: View {
             // reached the document.
             HStack(spacing: 0) {
                 CollapsiblePane(edge: .leading, isOpen: model.inspectorVisible,
-                                width: Self.inspectorWidth) {
+                                width: Pane.outline.width) {
                     InspectorView(model: model)
                 }
                 document.paneContent()
                 CollapsiblePane(edge: .trailing, isOpen: model.annotationsVisible,
-                                width: Self.annotationsWidth) {
+                                width: Pane.annotations.width) {
                     AnnotationsPane(model: model)
                 }
             }
@@ -118,6 +113,8 @@ struct ReviewView: View {
             captureToken: model.captureToken,
             requestedZoom: model.requestedZoom,
             zoomToken: model.zoomToken,
+            pageHold: model.pageHold,
+            pageHoldToken: model.pageHoldToken,
             revealToken: model.revealToken,
             revealBlock: model.revealBlock,
             revealBlockToken: model.revealBlockToken,
@@ -156,7 +153,7 @@ struct ReviewView: View {
         // this platform puts it.
         ToolbarItem(placement: .navigation) {
             Button {
-                withMotion(.panel) { model.inspectorVisible.toggle() }
+                withMotion(.panel) { model.togglePane(.outline) }
             } label: {
                 Label("Outline", systemImage: "sidebar.leading")
             }
@@ -216,7 +213,7 @@ struct ReviewView: View {
             // One icon, always. A dot says there are annotations rather than the glyph
             // changing shape, which would read as a different button.
             Button {
-                withMotion(.panel) { model.annotationsVisible.toggle() }
+                withMotion(.panel) { model.togglePane(.annotations) }
             } label: {
                 Label("Annotations", systemImage: "text.bubble")
                     .overlay(alignment: .topTrailing) {

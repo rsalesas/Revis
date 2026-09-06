@@ -36,6 +36,7 @@ struct BridgeTests {
         let entryPoints = [
             "rvCaptureSelection", "rvCaptureBlock", "rvSetTool", "rvSetZoom",
             "rvSetColours", "rvSetAnnotations", "rvSelect", "rvScrollTo", "rvScrollToBlock",
+            "rvHold",
         ]
         for name in entryPoints {
             #expect(Self.runtime.contains("window.\(name) = "),
