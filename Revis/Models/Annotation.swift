@@ -53,7 +53,11 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
         case .move:     return "arrow.up.arrow.down"
         case .question: return "questionmark"
         case .approve:  return "checkmark"
-        case .note:     return "text.bubble"
+        // `bubble`, not `text.bubble`. The seven marks want to read as one set, and the
+        // one with lines drawn inside it carried noticeably more ink than the other six —
+        // it looked a size larger at the same point size, which is exactly the thing a row
+        // of type labels must not do. An empty bubble is the same idea at the same weight.
+        case .note:     return "bubble"
         }
     }
 

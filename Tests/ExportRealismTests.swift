@@ -164,3 +164,52 @@ struct ExportRealismTests {
             atomically: true, encoding: .utf8)
     }
 }
+
+/// Emits a review carrying one annotation of every intent, for looking at.
+///
+/// Card geometry is not something a unit test can measure — SwiftUI decides it at render
+/// time — so the way to check that seven cards are the same shape is to put seven cards on
+/// screen at once. Building the `.revis` directly is far quicker than making seven
+/// annotations by hand, and it is reproducible, which a hand-made one is not.
+struct IntentSpecimenTests {
+
+    private static func fixture(_ name: String) -> String {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().appendingPathComponent("Fixtures")
+            .appendingPathComponent(name)
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    }
+
+    @Test func writeOneCardOfEveryIntent() throws {
+        let html = Self.fixture("data-retention-spec.html")
+        let prepared = DocumentPrep.prepare(html: html, baseURL: nil)
+
+        // Blocks 3 upward: the paragraphs of the document, one per intent, so the rows sit
+        // in document order and each gets its own marker rather than stacking.
+        let annotations = Intent.allCases.enumerated().map { index, intent in
+            Annotation(
+                author: "Robert Salesas", intent: intent,
+                // Every card carries the same words, so any difference in height is the
+                // card's doing and not the content's.
+                note: "One line of instruction.",
+                anchor: Anchor(blocks: [3 + index * 2],
+                               path: "Section \(index + 1) › paragraph 1",
+                               role: "paragraph",
+                               quote: "A quoted passage of roughly one line in length.",
+                               prefix: "", suffix: "", start: 0, end: 47, rect: nil))
+        }
+
+        let file = ReviewFile(
+            source: SourceInfo(name: "data-retention-spec.html", path: nil,
+                               capturedAt: .reviewStamp,
+                               digest: SourceInfo.digest(of: Data(html.utf8))),
+            document: prepared, annotations: annotations)
+
+        let directory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("build")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder.revis.encode(file).write(
+            to: directory.appendingPathComponent("all-intents.revis"))
+    }
+}

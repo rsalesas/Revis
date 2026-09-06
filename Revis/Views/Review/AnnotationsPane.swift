@@ -387,29 +387,39 @@ private struct IntentLabel: View {
     /// not enough.
     static let width: CGFloat = iconSide + 5 + titleWidth
 
+    /// Taller than the type needs: this is a control people click to change an
+    /// annotation's kind, and at the type's own height it was a nine-point strip.
+    static let height: CGFloat = 22
+
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: intent.symbol)
-                .font(.system(size: Self.fontSize, weight: .semibold))
-                // A square, centred, AND clipped. The frame alone was not enough: it sets
-                // the layout size but lets a wide glyph — `pencil.line`, `text.insert` —
-                // paint outside it, and a `Menu` measures what its label paints. So the
-                // seven intents produced menus three points apart and the control moved as
-                // you changed it. Clipping makes the painted box the laid-out box.
-                .frame(width: Self.iconSide, height: Self.iconSide)
-                .clipped()
-            Text(intent.title)
-                .font(.system(size: Self.fontSize, weight: .semibold))
-                .lineLimit(1)
-                .frame(width: Self.titleWidth, alignment: .leading)
-        }
-        // Belt and braces: whatever the two halves do, the label is this wide.
-        .frame(width: Self.width, alignment: .leading)
-        // A taller target than the type needs. This is a control people click to change an
-        // annotation's kind, and at the type's own height it was a nine-point strip.
-        .frame(height: 22)
-        .contentShape(Rectangle())
-        .foregroundStyle(AnnotationPalette.color(for: intent))
+        // The SIZE comes from the empty rectangle; the content is drawn over it and has no
+        // say in the matter.
+        //
+        // Frames on the content were tried twice and were not enough either time. A
+        // `.frame` sets a view's layout size but lets it paint outside, and the things
+        // measuring this label — a `Menu`, and the row's stack — measure what is painted.
+        // So `pencil.line` made the control wider than `checkmark`, and `text.bubble` made
+        // the whole card one point taller than the other six. A point is not much; a card
+        // that is a different height for one of seven types is still wrong, and no amount
+        // of matching frames to glyphs was going to end it. Laying out a fixed empty box
+        // and hanging the content off it does: the content cannot influence a size that was
+        // decided without reference to it.
+        Color.clear
+            .frame(width: Self.width, height: Self.height)
+            .overlay(alignment: .leading) {
+                HStack(spacing: 5) {
+                    Image(systemName: intent.symbol)
+                        .font(.system(size: Self.fontSize, weight: .semibold))
+                        .frame(width: Self.iconSide, height: Self.iconSide)
+                        .clipped()
+                    Text(intent.title)
+                        .font(.system(size: Self.fontSize, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .contentShape(Rectangle())
+            .foregroundStyle(AnnotationPalette.color(for: intent))
     }
 }
 
@@ -421,6 +431,9 @@ private struct IntentLabel: View {
 /// opened.
 struct IntentPicker: View {
     @Binding var intent: Intent
+
+    /// Room for the disclosure chevron beside the label.
+    private static let chevron: CGFloat = 16
 
     var body: some View {
         Menu {
@@ -436,17 +449,22 @@ struct IntentPicker: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.visible)
-        // Every one of these is pinning something a `Menu` would otherwise decide for
-        // itself, and each was a way the label moved: the control size sets the chevron's
-        // size and the label's padding, the font is inherited by the label unless it is
-        // stated, and `fixedSize` stops the menu claiming whatever width is going.
-        //
         // `.regular` rather than `.small`: the small size shrinks the chevron to a mark
         // you have to aim at, and this is the control that says what an annotation is.
         .controlSize(.regular)
         .font(.system(size: IntentLabel.fontSize, weight: .semibold))
         .imageScale(.medium)
-        .fixedSize()
+        // The frame goes on the MENU, not just on its label, and `fixedSize` is gone.
+        //
+        // A fixed frame inside the label was not enough and could not be: `fixedSize` asks
+        // the menu for its ideal width, and a menu's idea of ideal is its own — it tracked
+        // the length of the word, so the chevron after "Note" sat twelve points left of the
+        // one after "Approve" and a column of rows had a ragged edge. Constraining the
+        // control itself is the only thing the menu cannot reinterpret. The height is
+        // pinned for the same reason: `text.bubble` was reporting a taller control than the
+        // other six.
+        .frame(width: IntentLabel.width + Self.chevron, height: IntentLabel.height,
+               alignment: .leading)
         .help("What is being asked for here — click to change it")
     }
 }
