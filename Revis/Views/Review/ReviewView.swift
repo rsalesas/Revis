@@ -57,28 +57,32 @@ struct ReviewView: View {
         if model.isEmpty {
             EmptyReviewView()
         } else {
-            // The outline sits on the LEADING side, and the annotations on the trailing.
+            // Three siblings in one row: the outline on the LEADING side, the document,
+            // the annotations on the trailing.
             //
-            // It was on the trailing side beside the annotations, which is where Vaelora
-            // puts its inspector — but Vaelora's inspector configures an export, and this
-            // one is a table of contents. Navigation belongs on the leading edge: it is
-            // where every document application on this platform puts a source list, and it
-            // is where the eye goes to ask "where am I" rather than "what did somebody say
-            // about this".
+            // The outline was on the trailing side beside the annotations, which is where
+            // Vaelora puts its inspector — but Vaelora's inspector configures an export
+            // and this one is a table of contents. Navigation belongs on the leading edge:
+            // it is where every document application on this platform puts a source list,
+            // and where the eye goes to ask "where am I" rather than "what did somebody
+            // say about this".
             //
-            // Nested with the inspector OUTERMOST: opening the annotations then takes width
-            // from the document and leaves the outline where it is, which is what you want
-            // when the outline is the thing you were reading down.
-            CollapsibleSidePane(edge: .leading, isOpen: model.inspectorVisible,
+            // NOT nested. Vaelora nests its panes because its layout animates and an
+            // animation has to be applied by the view laying out both children, so the
+            // nesting decides whose width each animation comes out of. Nothing here
+            // animates the layout any more, so the nesting bought nothing and cost a
+            // level: toggling the outline re-solved the annotations pane before the change
+            // reached the document.
+            HStack(spacing: 0) {
+                CollapsiblePane(edge: .leading, isOpen: model.inspectorVisible,
                                 width: Self.inspectorWidth) {
-                CollapsibleSidePane(isOpen: model.annotationsVisible,
-                                    width: Self.annotationsWidth) {
-                    document
-                } pane: {
+                    InspectorView(model: model)
+                }
+                document.paneContent()
+                CollapsiblePane(edge: .trailing, isOpen: model.annotationsVisible,
+                                width: Self.annotationsWidth) {
                     AnnotationsPane(model: model)
                 }
-            } pane: {
-                InspectorView(model: model)
             }
         }
     }
