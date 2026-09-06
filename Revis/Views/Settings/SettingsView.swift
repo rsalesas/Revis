@@ -50,6 +50,24 @@ private struct GeneralSettingsTab: View {
             }
 
             Section {
+                Toggle("Show documents with their own stylesheet",
+                       isOn: $appSettings.useDocumentStyle)
+                Picker("Documents open at", selection: $appSettings.defaultZoom) {
+                    Text("Fit width").tag(0.0)
+                    Divider()
+                    ForEach(ReviewModel.zoomStops, id: \.self) { stop in
+                        Text("\(Int((stop * 100).rounded()))%").tag(stop)
+                    }
+                }
+                Text("A document is reviewed as it was sent, so its own stylesheet is used"
+                     + " by default. Either can be changed for one window from the bar along"
+                     + " the bottom.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
                 Toggle("Write a JSON sidecar when exporting", isOn: $appSettings.exportSidecar)
                 Text("A machine-readable copy of the same items, saved beside the Markdown."
                      + " Useful for a script that applies the review rather than a model"

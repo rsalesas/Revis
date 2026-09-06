@@ -64,6 +64,22 @@ final class ReviewModel: ObservableObject {
     /// "no annotations", which would be a claim it cannot yet make.
     @Published var isPreparing = true
 
+    // MARK: - How it is shown
+
+    /// Whether the document is drawn with its own stylesheet, or with the app's reading
+    /// style. Per window: one document can be unreadable as sent while another is fine.
+    @Published var useDocumentStyle: Bool { didSet { rebuildPage() } }
+
+    /// The current zoom, as the page reports it back — never as the app assumes it. Fit is
+    /// a measurement, so the only honest source for "what percentage am I at" is the page.
+    @Published private(set) var zoom: Double = 1
+    /// What "fit the window" currently means, kept up to date as the window is resized.
+    @Published private(set) var fitZoom: Double = 1
+    /// The zoom to apply; zero asks the page to fit. Pushed on the token changing so the
+    /// same value can be asked for twice.
+    @Published private(set) var requestedZoom: Double = 0
+    @Published private(set) var zoomToken = 0
+
     /// Bumped to ask the runtime for the current selection; the answer arrives
     /// asynchronously, since reading the DOM from Swift is a round trip.
     @Published var captureToken = 0
@@ -86,6 +102,8 @@ final class ReviewModel: ObservableObject {
         author = appSettings.reviewerName
         annotationsVisible = appSettings.lastAnnotationsVisible
         inspectorVisible = appSettings.lastInspectorVisible
+        useDocumentStyle = appSettings.useDocumentStyle
+        requestedZoom = appSettings.defaultZoom
         rebuildPage()
     }
 
@@ -108,8 +126,43 @@ final class ReviewModel: ObservableObject {
     private func rebuildPage() {
         guard !prepared.body.isEmpty else { pageHTML = ""; return }
         pageHTML = DocumentShell.page(
-            for: prepared, chromeCSS: DocumentShell.bundleString(named: "review", ext: "css"))
+            for: prepared, chromeCSS: DocumentShell.bundleString(named: "review", ext: "css"),
+            useDocumentCSS: useDocumentStyle)
     }
+
+    // MARK: - Zoom
+
+    /// The steps the -/+ buttons walk. Not a percentage added or multiplied: an even
+    /// multiplier gives silly numbers (137%) and an even step is too coarse at the bottom
+    /// and too fine at the top. These are the ones a document viewer conventionally offers.
+    static let zoomStops: [Double] = [0.5, 0.67, 0.75, 0.85, 1.0, 1.15, 1.25, 1.5, 1.75, 2.0]
+
+    func setZoom(_ value: Double) {
+        requestedZoom = max(0.35, min(3, value))
+        zoomToken &+= 1
+    }
+
+    /// Ask the page what fits and go there. A measurement, not a number the app can work
+    /// out: the answer depends on the document's own width, which only the page knows.
+    func zoomToFit() {
+        requestedZoom = 0
+        zoomToken &+= 1
+    }
+
+    func zoomIn() { setZoom(Self.zoomStops.first { $0 > zoom + 0.001 } ?? 3) }
+
+    func zoomOut() { setZoom(Self.zoomStops.last { $0 < zoom - 0.001 } ?? 0.35) }
+
+    /// The page reporting what it actually did. Kept separate from `requestedZoom` so the
+    /// status bar shows the real percentage after a fit rather than the zero that asked
+    /// for it.
+    func receive(zoom value: Double) { zoom = value }
+
+    func receive(fit value: Double) { fitZoom = value }
+
+    /// Whether the current zoom already fits, so the Fit control can say so rather than
+    /// offering to do what has been done.
+    var isFitted: Bool { abs(zoom - fitZoom) < 0.005 }
 
     /// Everything that goes back into the file on save.
     ///
@@ -143,6 +196,24 @@ final class ReviewModel: ObservableObject {
     }
 
     var openCount: Int { annotations.filter { $0.status == .open }.count }
+
+    /// Where in the visible list an open draft belongs — the position it will occupy once
+    /// it is added.
+    ///
+    /// The draft used to be drawn at the top of the pane whatever it was about, so
+    /// pressing Add made the row jump somewhere else. A row that appears in one place and
+    /// lands in another reads as the app correcting a mistake; opened where it ends up, it
+    /// simply stays put.
+    var draftIndex: Int? {
+        guard let draft else { return nil }
+        let key = (draft.anchor.blocks.first ?? Int.max, draft.anchor.start)
+        let visible = visibleAnnotations
+        let after = visible.firstIndex {
+            let order = $0.ordering
+            return (order.0, order.1) > key
+        }
+        return after ?? visible.count
+    }
 
     func index(of id: UUID) -> Int? { annotations.firstIndex { $0.id == id } }
 

@@ -31,6 +31,9 @@ struct DocumentWebView: NSViewRepresentable {
     /// Bumped to ask for the current selection. The answer arrives through `onAnchor`,
     /// since reading the DOM is a round trip.
     var captureToken: Int
+    /// The zoom to apply; zero asks the page to work out what fits.
+    var requestedZoom: Double
+    var zoomToken: Int
     /// Bumped to scroll to `currentMark`.
     var revealToken: Int
     var revealBlock: Int?
@@ -40,6 +43,9 @@ struct DocumentWebView: NSViewRepresentable {
     var onSelectionChanged: ((Bool) -> Void)?
     var onPick: ((String) -> Void)?
     var onAnchor: ((Anchor?) -> Void)?
+    /// The page reporting the zoom it settled on, and what "fit" currently means.
+    var onZoom: ((Double) -> Void)?
+    var onFit: ((Double) -> Void)?
     /// A region drag finished. It carries a complete anchor, so there is nothing to ask
     /// for afterwards.
     var onRegion: ((Anchor) -> Void)?
@@ -116,6 +122,11 @@ struct DocumentWebView: NSViewRepresentable {
             c.run("window.rvSelect && window.rvSelect(\(jsQuoted(currentMark)));"
                 + "window.rvSetAnnotations && window.rvSetAnnotations(\(jsQuoted(annotations)));")
         }
+        if c.lastZoomToken != zoomToken {
+            c.lastZoomToken = zoomToken
+            c.pendingZoom = requestedZoom
+            c.run("window.rvSetZoom && window.rvSetZoom(\(requestedZoom));")
+        }
         if c.lastCaptureToken != captureToken {
             c.lastCaptureToken = captureToken
             let report = onAnchor
@@ -146,6 +157,8 @@ struct DocumentWebView: NSViewRepresentable {
         var lastCurrent = ""
         var lastTool: ReviewTool?
         var lastCaptureToken = 0
+        var lastZoomToken = 0
+        var pendingZoom: Double = 0
         var lastRevealToken = 0
         var lastRevealBlockToken = 0
 
@@ -157,6 +170,9 @@ struct DocumentWebView: NSViewRepresentable {
         var pendingCurrent = ""
         var pendingTool: ReviewTool = .select
 
+        var onZoom: ((Double) -> Void)?
+        var onFit: ((Double) -> Void)?
+
         var onReady: ((Int, [OutlineItem]) -> Void)?
         var onSelectionChanged: ((Bool) -> Void)?
         var onPick: ((String) -> Void)?
@@ -167,6 +183,9 @@ struct DocumentWebView: NSViewRepresentable {
             onSelectionChanged = view.onSelectionChanged
             onPick = view.onPick
             onRegion = view.onRegion
+            onZoom = view.onZoom
+            onFit = view.onFit
+            pendingZoom = view.requestedZoom
             pendingAnnotations = view.annotations
             pendingCurrent = view.currentMark
             pendingTool = view.tool
@@ -192,6 +211,7 @@ struct DocumentWebView: NSViewRepresentable {
                 // Everything the model already knew about, now that there is a document to
                 // draw it on.
                 run("window.rvSetColours && window.rvSetColours(\(AnnotationPalette.json()));"
+                    + "window.rvSetZoom && window.rvSetZoom(\(pendingZoom));"
                     + "window.rvSetTool && window.rvSetTool(\(jsQuoted(pendingTool.rawValue)));"
                     + "window.rvSelect && window.rvSelect(\(jsQuoted(pendingCurrent)));"
                     + "window.rvSetAnnotations && window.rvSetAnnotations("
@@ -203,6 +223,10 @@ struct DocumentWebView: NSViewRepresentable {
                 onSelectionChanged?((dict["has"] as? Bool) ?? false)
             case "pick":
                 if let id = dict["id"] as? String { onPick?(id) }
+            case "zoom":
+                if let value = dict["value"] as? Double { onZoom?(value) }
+            case "fit":
+                if let value = dict["value"] as? Double { onFit?(value) }
             case "region":
                 if let raw = dict["anchor"], let anchor = Anchor.decode(json: raw) {
                     onRegion?(anchor)

@@ -114,11 +114,34 @@ Samples/        A generated spec to try it on, complete with the things it shoul
 Tests/
 ```
 
+## Showing the document
+
+Two controls, both in the bar along the bottom and both also in View:
+
+**Zoom** uses the CSS `zoom` property rather than a transform, so the page genuinely
+re-lays out at the new size — text stays crisp, line breaks fall where they really would,
+and mouse coordinates stay in the page's own space, which is what keeps the margin marks
+landing on the right lines. *Fit Width* is a measurement taken by the page, not a number
+the app guesses.
+
+**Document style / Reading style.** By default a document is drawn with its own stylesheet,
+because that is what is under review — the chrome's defaults are all wrapped in `:where()`
+so they carry no specificity and lose to anything the document says. The switch sets that
+stylesheet aside for a plain reading style, for documents that arrive genuinely hard to
+read. It is loud about being on: what you are looking at then is *not* how the document
+looks.
+
 ## Status
 
-First version. What works: opening and sanitizing a document, text and region annotations
-with intents, the annotations pane, the outline and provenance inspector, saving a `.revis`,
-and the Markdown/JSON export.
+First version, exercised end to end against a real generated document: opening and
+sanitizing, text and region annotations with intents, the annotations pane, the outline and
+provenance inspector, zoom, the stylesheet switch, saving a `.revis`, and the
+Markdown/JSON export.
+
+Not verified yet: whether a model actually applies the export correctly. The export is
+prose keyed on quoted text, with block indices marked explicitly as tie-breakers — the open
+question is whether that is enough to locate every item without alignment, or whether the
+anchors need to be carried in the document itself. That is the next test.
 
 Not done yet: freehand drawing and highlighting on the page, replies to an annotation,
 comparing two versions of a document, and the app icon.

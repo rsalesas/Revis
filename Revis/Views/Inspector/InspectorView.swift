@@ -84,6 +84,27 @@ struct InspectorView: View {
                     field("Blocks", "\(model.blockCount)")
                 }
 
+                group("Display") {
+                    // Here as well as in the status bar, and that is not a duplicate: the
+                    // bar is where you reach for it while reading, and this is where it is
+                    // explained. A one-word control with no room for a sentence beside it
+                    // cannot say what it costs you.
+                    Toggle("Use the document's own stylesheet",
+                           isOn: $model.useDocumentStyle)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .font(.system(size: 11))
+                    Text(model.useDocumentStyle
+                         ? "The document is drawn exactly as it was sent, which is what you"
+                           + " are reviewing."
+                         : "The document's stylesheet has been set aside for a plain reading"
+                           + " style. What you see is NOT how it looks — turn this back on"
+                           + " before judging its appearance.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(model.useDocumentStyle ? .secondary : .primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 group("Made safe") {
                     if model.prepared.report.isClean {
                         Text("Nothing had to be removed.")

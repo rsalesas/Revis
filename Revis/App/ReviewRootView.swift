@@ -26,7 +26,7 @@ struct ReviewRootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Not decoration: this is what stops the review being autosaved over the
             // document it is a review OF.
-            .background(SourceDetachment(generation: detachGeneration))
+            .background(SourceDetachment(generation: detachGeneration, name: model.displayName))
             .focusedSceneValue(\.activeReview, model)
             .onAppear {
                 model.tool = appSettings.defaultTool

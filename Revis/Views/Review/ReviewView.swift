@@ -16,23 +16,12 @@ struct ReviewView: View {
     @State private var export: ExportPreview?
 
     var body: some View {
-        Group {
-            if model.isEmpty {
-                EmptyReviewView()
-            } else {
-                // Nested, inspector OUTERMOST: opening the annotations then takes width
-                // from the document and leaves the inspector where it is, which is what
-                // you want when the inspector is the thing you were reading.
-                CollapsibleSidePane(isOpen: model.inspectorVisible, width: 260) {
-                    CollapsibleSidePane(isOpen: model.annotationsVisible, width: 300) {
-                        document
-                    } pane: {
-                        AnnotationsPane(model: model)
-                    }
-                } pane: {
-                    InspectorView(model: model)
-                }
-            }
+        VStack(spacing: 0) {
+            content
+            // Below the split rather than inside it: the bar is about the window, and one
+            // that sat inside the document pane would stop at the annotations pane's edge
+            // and read as part of the page rather than as part of the app.
+            if !model.isEmpty { StatusBar(model: model) }
         }
         .background(Theme.documentBackground)
         .navigationTitle(model.displayName)
@@ -50,6 +39,25 @@ struct ReviewView: View {
             export = ExportPreview(markdown: model.exportMarkdown(),
                                    json: model.exportJSON(),
                                    suggestedName: model.exportBaseName)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if model.isEmpty {
+            EmptyReviewView()
+        } else {
+            // Nested, inspector OUTERMOST: opening the annotations then takes width from
+            // the document and leaves the inspector where it is, which is what you want
+            // when the inspector is the thing you were reading.
+            CollapsibleSidePane(isOpen: model.inspectorVisible, width: 260) {
+                CollapsibleSidePane(isOpen: model.annotationsVisible, width: 300) {
+                    document
+                } pane: {
+                    AnnotationsPane(model: model)
+                }
+            } pane: {
+                InspectorView(model: model)
+            }
         }
     }
 
@@ -72,6 +80,8 @@ struct ReviewView: View {
             currentMark: model.currentMarkID,
             tool: model.tool,
             captureToken: model.captureToken,
+            requestedZoom: model.requestedZoom,
+            zoomToken: model.zoomToken,
             revealToken: model.revealToken,
             revealBlock: model.revealBlock,
             revealBlockToken: model.revealBlockToken,
@@ -88,6 +98,8 @@ struct ReviewView: View {
                 model.reveal(uuid)
             },
             onAnchor: { model.receive(anchor: $0) },
+            onZoom: { model.receive(zoom: $0) },
+            onFit: { model.receive(fit: $0) },
             onRegion: { model.openDraft(on: $0, intent: appSettings.defaultIntent) })
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

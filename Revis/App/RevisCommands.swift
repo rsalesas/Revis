@@ -62,6 +62,25 @@ struct RevisCommands: Commands {
             .pickerStyle(.inline)
         }
 
+        CommandGroup(after: .sidebar) {
+            Button("Zoom In") { review?.zoomIn() }
+                .keyboardShortcut("+", modifiers: .command)
+            Button("Zoom Out") { review?.zoomOut() }
+                .keyboardShortcut("-", modifiers: .command)
+            Button("Actual Size") { review?.setZoom(1) }
+                .keyboardShortcut("0", modifiers: .command)
+            Button("Fit Width") { review?.zoomToFit() }
+                .keyboardShortcut("9", modifiers: .command)
+            Divider()
+            Button(review?.useDocumentStyle == false ? "Use the Document's Stylesheet"
+                                                     : "Use a Plain Reading Style") {
+                guard let review else { return }
+                withMotion(.reveal) { review.useDocumentStyle.toggle() }
+            }
+            .keyboardShortcut("y", modifiers: [.command, .shift])
+            Divider()
+        }
+
         CommandGroup(before: .toolbar) {
             Button("Show Annotations") {
                 guard let review else { return }

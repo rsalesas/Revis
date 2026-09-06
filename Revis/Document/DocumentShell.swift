@@ -49,7 +49,13 @@ enum DocumentShell {
     /// That order gives the document the last word on how it looks, which is what a
     /// review needs — you are reviewing what was sent, not our idea of it. The chrome
     /// keeps its own appearance because it is addressed by ids the document does not use.
-    static func page(for prepared: PreparedDocument, chromeCSS: String) -> String {
+    /// - Parameter useDocumentCSS: whether the document's own stylesheet is injected.
+    ///   Off, the page falls back to the chrome's own reading defaults — which is not a
+    ///   cosmetic preference: a generated document can arrive in aseven-point condensed face
+    ///   on a tinted ground, and being unable to read it is being unable to review it. It
+    ///   is off by default nowhere, because what was sent is what is under review.
+    static func page(for prepared: PreparedDocument, chromeCSS: String,
+                     useDocumentCSS: Bool = true) -> String {
         """
         <!DOCTYPE html>
         <html>
@@ -62,10 +68,10 @@ enum DocumentShell {
         \(chromeCSS)
         </style>
         <style>
-        \(prepared.css)
+        \(useDocumentCSS ? prepared.css : "")
         </style>
         </head>
-        <body>
+        <body class="\(useDocumentCSS ? "" : "rv-reading")">
         <div id="rv-page">
           <div id="rv-sheet">
             <div id="rv-doc">

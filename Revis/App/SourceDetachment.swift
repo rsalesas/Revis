@@ -27,6 +27,11 @@ struct SourceDetachment: NSViewRepresentable {
     /// Bumped when a document has just been imported and needs cutting loose. Zero means
     /// there is nothing to do — a review opened from its own `.revis` file keeps its URL.
     let generation: Int
+    /// What to call the window afterwards. Losing the URL makes macOS call the document
+    /// "Untitled 3", which tells the reviewer nothing about which of three open reviews
+    /// they are looking at — and `navigationTitle` does not win here, because a
+    /// document-backed window takes its title from the document.
+    let name: String
 
     func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
 
@@ -41,10 +46,25 @@ struct SourceDetachment: NSViewRepresentable {
             guard document.fileURL != nil else { return }
             document.fileURL = nil
             document.fileType = UTType.revisReview.identifier
+            if !name.isEmpty { document.displayName = name }
             // A draft is a document macOS knows has never been saved, so ⌘S offers a save
             // panel rather than writing somewhere. Without it, a document that has lost
             // its URL is merely a document with nowhere to go.
             document.isDraft = true
+
+            // …and it has no unsaved changes yet, whatever the framework currently thinks.
+            //
+            // Importing writes the sanitized snapshot into the `FileDocument`, which is a
+            // change as far as AppKit is concerned — so a window that had just been opened
+            // and not touched said "Edited", and quitting put up a "save your changes?"
+            // sheet for a review nobody had made a mark on. Nothing has been done to this
+            // document; saying so is not a lie, it is the correction.
+            //
+            // One more hop, because the binding that writes the snapshot back runs in the
+            // same update as the import and would otherwise dirty the document again
+            // straight after this cleared it. Adding an actual annotation marks it changed
+            // again by the ordinary route, so a review with marks on it still asks.
+            DispatchQueue.main.async { document.updateChangeCount(.changeCleared) }
         }
     }
 

@@ -78,6 +78,7 @@
     blocks = [];
     meta = [];
     var headings = [];      // the open heading trail, innermost last
+    var documentTitleSeen = false;   // the first h1 is the document's name, not a section
     var counts = {};        // role -> how many since the last heading, for "paragraph 3"
     var outline = [];
 
@@ -101,6 +102,19 @@
             headings.pop();
           }
           var text = flatten(child.textContent);
+          /* The document's own title is not a section, so it does not belong in the
+             trail. Left in, EVERY path began with it — and since a generated spec's
+             title is a sentence, every path in the pane was then truncated from the
+             front, hiding the part that says where you actually are. Only the first
+             top-level heading is treated this way: a document that uses `h1` per
+             section keeps them all but the first. */
+          if (depth === 1 && !documentTitleSeen) {
+            documentTitleSeen = true;
+            outline.push({ level: depth, text: text, block: index });
+            counts = {};
+            meta.push({ role: role, path: "(title)" });
+            continue;
+          }
           headings.push({ depth: depth, text: text });
           counts = {};
           outline.push({ level: depth, text: text, block: index });
@@ -126,6 +140,13 @@
 
   function flatten(text) {
     return (text || "").replace(/\s+/g, " ").trim();
+  }
+
+  /* Collapsed whitespace, trimmed only on the side away from the quote. `side` names the
+     edge that is trimmed: "start" for a prefix, "end" for a suffix. */
+  function edged(text, side) {
+    var out = (text || "").replace(/\s+/g, " ");
+    return side === "start" ? out.replace(/^\s+/, "") : out.replace(/\s+$/, "");
   }
 
   // ------------------------------------------------------------------- anchors
@@ -203,8 +224,12 @@
       path: meta[index] ? meta[index].path : "",
       role: meta[index] ? meta[index].role : "block",
       quote: quote,
-      prefix: flatten(text.slice(Math.max(0, start - CONTEXT), start)),
-      suffix: flatten(text.slice(end, end + CONTEXT)),
+      /* Trimmed at the outer edge and NOT at the inner one: `flatten` alone ate the
+         space between the context and the quote, so the export read
+         "…Platform retains«each class of record», what…" — words run together at exactly
+         the point a reader is trying to see the boundary. */
+      prefix: edged(text.slice(Math.max(0, start - CONTEXT), start), "start"),
+      suffix: edged(text.slice(end, end + CONTEXT), "end"),
       start: start,
       end: end,
       rect: null,
@@ -341,6 +366,50 @@
              width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y) };
   }
 
+  // ------------------------------------------------------------------- zoom
+
+  /* Zoom with the CSS `zoom` property rather than a transform.
+   *
+   * A transform scales a rendered picture: text is resampled, and hit-testing has to be
+   * unwound by hand because the page's coordinate space no longer matches the pointer's.
+   * `zoom` re-lays the document out at the new size — text stays crisp, line breaks move
+   * where they would really move, and `getBoundingClientRect` keeps returning numbers in
+   * the same space as a mouse event. The markers and region boxes are positioned from
+   * exactly those numbers, so they follow for free; they only need repainting because the
+   * reflow moves the blocks they are measured against.
+   *
+   * Applied to `#rv-page`, which contains the gutter as well as the sheet, so the marks
+   * scale with the words they belong to instead of drifting off them. */
+  window.rvSetZoom = function (value) {
+    var page = document.getElementById("rv-page");
+    if (!page) return 1;
+    var z = (typeof value === "number" && value > 0) ? value : fitZoom();
+    z = Math.max(0.35, Math.min(3, z));
+    page.style.zoom = z;
+    /* After the reflow, not during it: every mark's position is measured, and measuring
+       mid-layout reads the geometry the page is leaving rather than the one it is
+       arriving at. */
+    requestAnimationFrame(function () {
+      paint();
+      post("zoom", { value: z });
+    });
+    return z;
+  };
+
+  /* The zoom at which the sheet just fills the window.
+   *
+   * Read off the sheet's own natural width rather than hard-coded from the stylesheet:
+   * `#rv-page` has a max-width, and a narrow window is already below it, in which case
+   * fitting means 100% and not "stretch it". */
+  function fitZoom() {
+    var page = document.getElementById("rv-page");
+    if (!page) return 1;
+    var available = document.documentElement.clientWidth;
+    var natural = page.offsetWidth * (parseFloat(page.style.zoom) || 1);
+    if (!natural) return 1;
+    return Math.max(0.35, Math.min(3, (available - 24) / natural));
+  }
+
   window.rvSetTool = function (name) {
     tool = name === "region" ? "region" : "select";
     document.documentElement.setAttribute("data-rv-tool", tool);
@@ -420,8 +489,16 @@
         range.setEnd(to.node, to.offset);
       } catch (e) { continue; }
       ranges[a.id] = range;
-      var key = (a.id === selectedID ? "current" : a.intent);
-      (byIntent[key] = byIntent[key] || []).push(range);
+      /* Always in its intent's highlight, and additionally in `current` when it is the
+         chosen one. Both, not one or the other: the current mark used to swap its wash
+         for a single blue, which lost the intent — the reader could no longer see that
+         the thing they were reading was a deletion — and looked exactly like the live
+         text selection into the bargain. `current` now carries only an underline
+         (see review.css), so it layers rather than replaces. */
+      (byIntent[a.intent] = byIntent[a.intent] || []).push(range);
+      if (a.id === selectedID) {
+        (byIntent.current = byIntent.current || []).push(range);
+      }
     }
     for (var name in byIntent) {
       if (!Object.prototype.hasOwnProperty.call(byIntent, name)) continue;
@@ -540,7 +617,12 @@
     var pending = 0;
     window.addEventListener("resize", function () {
       clearTimeout(pending);
-      pending = setTimeout(paint, 80);
+      pending = setTimeout(function () {
+        paint();
+        // What "fit" would mean at the new size, so the status bar's Fit control acts on
+        // the window as it is rather than as it was when the document loaded.
+        post("fit", { value: fitZoom() });
+      }, 80);
     });
   }
 

@@ -96,16 +96,15 @@ struct AnnotationsPane: View {
                 // after an edit and then jumping when you touch it. A review holds tens of
                 // rows, not thousands; laziness buys nothing here and costs that.
                 VStack(alignment: .leading, spacing: 0) {
-                    if let draft = model.draft {
-                        draftRow(draft)
-                            .id(Self.draftRowID)
-                            .revealedRowTransition()
-                        Divider().overlay(Theme.hairline)
-                    }
-                    ForEach(model.visibleAnnotations) { annotation in
+                    // The draft opens where it will END UP — its place in document order —
+                    // rather than at the top. See `ReviewModel.draftIndex`.
+                    if model.draftIndex == 0 { draftSlot }
+                    ForEach(Array(model.visibleAnnotations.enumerated()),
+                            id: \.element.id) { position, annotation in
                         row(annotation)
                             .id(annotation.id)
                         Divider().overlay(Theme.hairline)
+                        if model.draftIndex == position + 1 { draftSlot }
                     }
                 }
             }
@@ -132,6 +131,15 @@ struct AnnotationsPane: View {
         // Deliberately not animated on the list changing: resolving one mark moves every
         // row after it, and animating that makes the whole column slide about while you
         // are reading it.
+    }
+
+    @ViewBuilder private var draftSlot: some View {
+        if let draft = model.draft {
+            draftRow(draft)
+                .id(Self.draftRowID)
+                .revealedRowTransition()
+            Divider().overlay(Theme.hairline)
+        }
     }
 
     private static let draftRowID = "revis-draft"

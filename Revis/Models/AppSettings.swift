@@ -27,6 +27,19 @@ final class AppSettings: ObservableObject {
     /// Which tool a window opens in.
     @Published var defaultTool: ReviewTool { didSet { save(.defaultTool, defaultTool.rawValue) } }
 
+    /// Whether a document is shown with its own stylesheet.
+    ///
+    /// True by default and meant to stay that way: you are reviewing what was sent, and a
+    /// viewer with opinions about typography is showing you a different document. The
+    /// switch exists because generated HTML is sometimes genuinely hard to read — a
+    /// condensed face, colour on colour, a measure the width of the window — and being
+    /// unable to read it is being unable to review it.
+    @Published var useDocumentStyle: Bool { didSet { save(.useDocumentStyle, useDocumentStyle) } }
+
+    /// The zoom a newly opened document starts at. Zero means "fit the window", which is
+    /// what most people want and what no fixed percentage can be.
+    @Published var defaultZoom: Double { didSet { save(.defaultZoom, defaultZoom) } }
+
     /// Whether the export writes the JSON sidecar beside the Markdown.
     @Published var exportSidecar: Bool { didSet { save(.exportSidecar, exportSidecar) } }
 
@@ -48,6 +61,7 @@ final class AppSettings: ObservableObject {
 
     private enum Key: String {
         case reviewerName, defaultIntent, defaultTool, exportSidecar
+        case useDocumentStyle, defaultZoom
         case annotationsVisible, inspectorVisible
     }
 
@@ -60,6 +74,8 @@ final class AppSettings: ObservableObject {
         defaultTool = ReviewTool(rawValue: defaults.string(forKey: Key.defaultTool.rawValue) ?? "")
             ?? .select
         exportSidecar = defaults.object(forKey: Key.exportSidecar.rawValue) as? Bool ?? true
+        useDocumentStyle = defaults.object(forKey: Key.useDocumentStyle.rawValue) as? Bool ?? true
+        defaultZoom = defaults.object(forKey: Key.defaultZoom.rawValue) as? Double ?? 0
     }
 
     private func save(_ key: Key, _ value: Any) {
