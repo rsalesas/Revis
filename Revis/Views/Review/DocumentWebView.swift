@@ -127,10 +127,7 @@ struct DocumentWebView: NSViewRepresentable {
         }
         if c.lastPrefitToken != prefitToken, prefitRatio > 0 {
             c.lastPrefitToken = prefitToken
-            // Held for a beat longer than the pane takes, so the last stragglers of the
-            // resize stream do not walk the page back through the widths it just skipped.
-            let hold = Int((Motion.panel.duration * 1000).rounded()) + 80
-            c.run("window.rvPrefit && window.rvPrefit(\(prefitRatio), \(hold));")
+            c.run("window.rvPrefit && window.rvPrefit(\(prefitRatio));")
         }
         if c.lastZoomToken != zoomToken {
             c.lastZoomToken = zoomToken

@@ -57,7 +57,6 @@
   var zoom = 1;            // the page's own zoom, divided back out of the margin furniture
   var fitting = true;      // whether the zoom is being kept at whatever fits the window
   var reported = -1;       // the last zoom the app was told about
-  var holdUntil = 0;       // resize refits are held off until this moment — see `rvPrefit`
   var selectedID = "";
   var tool = "select";
   var ranges = {};         // annotation id -> Range, for hit-testing a click
@@ -450,6 +449,7 @@
     var root = document.documentElement;
     if (fitting) root.removeAttribute("data-rv-zooming");
     else root.setAttribute("data-rv-zooming", "");
+    document.body.classList.toggle("rv-fitting", fitting);
     page.style.zoom = z;
     zoom = z;
     /* After the reflow, not during it: every mark's position is measured, and measuring
@@ -519,21 +519,21 @@
    *
    * `ratio` is the width the document pane is going to have over the width it has now — a
    * fraction rather than a number of points, because the page's own units are not the
-   * app's and the conversion between them is not one the app can be sure of.
+   * app's.
    *
-   * This exists because discovering the new width is too late. A pane animating open
-   * resizes the web view over a quarter of a second, and until the page has re-laid-out at
-   * each new width its sheet is still the old, wider one — hanging under the pane sliding
-   * over it, or off the edge of the window. Refitting per frame narrows that gap but
-   * cannot close it: the page is always answering the width before last.
+   * This does NOT hold off the refits that follow. It was tried that way — settle the size
+   * up front, then ignore the resize stream for the length of the animation — and it made
+   * things worse in a way that took an outside eye to name: dragging the window edge, where
+   * the page refits on every event, is visibly smoother than toggling a pane, where it
+   * refitted once and then sat still. The reason is that a sheet already at its final width
+   * inside a viewport that is still moving is centred against the wrong thing, so it drifts
+   * sideways for a quarter of a second. Following is smoother than arriving early.
    *
-   * Told in advance, the sheet is the right size from the first frame and the panes move
-   * around something that is already correct. Vaelora gets this for nothing, because
-   * SwiftUI hands its preview the final width immediately; this layout re-runs per frame,
-   * so it has to be said out loud. Resize-driven refits are held off for the length of the
-   * animation afterwards, or they would walk the page back through every intermediate
-   * width we just skipped. */
-  window.rvPrefit = function (ratio, holdMs) {
+   * What the advance notice is still good for is the FIRST frame: the pane's animation is
+   * front-loaded enough that the first resize event lands about half way through, and
+   * without this the page spends that half at its old width — hanging under the pane
+   * sliding over it. */
+  window.rvPrefit = function (ratio) {
     var page = document.getElementById("rv-page");
     if (!page || !(ratio > 0) || !fitting) return;
     var natural = page.offsetWidth;
@@ -542,7 +542,6 @@
     var z = Math.max(0.35, Math.min(3, (target - 1) / natural));
     page.style.zoom = z;
     zoom = z;
-    holdUntil = Date.now() + (holdMs > 0 ? holdMs : 0);
     requestAnimationFrame(paint);
   };
 
@@ -714,8 +713,13 @@
      to sit against it rather than out at arm's length. It does not have to be a big target any more: pressing anywhere on the
      line does that (see `pressGutter`), so the box can be the size the mark wants to be
      rather than the size a pointer needs. */
-  var SLOT_W = 20;         // painted; the box a mark lives in
-  var SLOT_H = 20;
+  /* Big enough for the RINGED image, not just the mark.
+     It was the size of the mark, and a chosen mark's picture is wider than that — the ring
+     is part of it — so the element clipped its own ring off and the chosen state became
+     invisible. The box is the ringed size; the unringed mark simply sits in the middle of
+     it with room to spare, which is no bad thing for something you press. */
+  var SLOT_W = 30;         // painted; the box a mark lives in
+  var SLOT_H = 30;
   var MARK = 19;           // painted; the mark drawn inside it
   var SLOT_COLS = 1;
 
@@ -749,6 +753,10 @@
     gutter.innerHTML = "";
     var origin = gutter.getBoundingClientRect();
     var slotW = SLOT_W / zoom, slotH = SLOT_H / zoom;
+    // The strip has to be as wide as the boxes in it, at every zoom. Its stylesheet width
+    // is in the page's units and the boxes are in painted ones, so at a small zoom a fixed
+    // width would clip them.
+    gutter.style.width = slotW + "px";
     var rows = {};
     for (var i = 0; i < annotations.length; i++) {
       var a = annotations[i];
@@ -918,15 +926,6 @@
     var pending = 0;
     window.addEventListener("resize", function () {
       if (fitting) {
-        /* Held off while a pane animation plays out — and doing NOTHING while it does.
-         *
-         * It repainted every frame, which was the last of the jerk. It did not need to:
-         * the marks, the region boxes and the highlights are all positioned inside the
-         * sheet or against the text itself, so when the viewport narrows and the sheet
-         * re-centres they move with it for free. Repainting was rebuilding every highlight
-         * range and every mark, sixty times a second, to arrive at the positions the
-         * browser had already given them. */
-        if (Date.now() < holdUntil) return;
         window.rvSetZoom(0);
         return;
       }

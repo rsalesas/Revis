@@ -99,6 +99,15 @@ html[data-rv-zooming] #rv-page { transition: none; }
    Below it there is nothing to scroll. */
 body { overflow-x: auto; }
 
+/* While FITTING, the sheet can never be wider than the room it has.
+   It is exactly that wide anyway, so this does nothing at rest. It does something for the
+   frame or two after the pane starts moving and before the page has re-laid-out at the new
+   width: without it the sheet is briefly the old, wider one and hangs under the pane
+   sliding over it. Clamped, the worst that happens is that one frame is drawn at a slightly
+   wrong measure — which is a great deal less noticeable than a page sticking out from under
+   its neighbour and then shuffling back. */
+body.rv-fitting #rv-page { max-width: 100%; }
+
 #rv-sheet {
   position: relative;
   background: var(--rv-sheet);
