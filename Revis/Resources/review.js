@@ -56,6 +56,7 @@
   var images = {};         // intent (and "…:resolved", "pending") -> the mark, as a data URL
   var zoom = 1;            // the page's own zoom, divided back out of the margin furniture
   var fitting = true;      // whether the zoom is being kept at whatever fits the window
+  var reported = -1;       // the last zoom the app was told about
   var selectedID = "";
   var tool = "select";
   var ranges = {};         // annotation id -> Range, for hit-testing a click
@@ -411,8 +412,15 @@
        arriving at. */
     requestAnimationFrame(function () {
       paint();
-      post("zoom", { value: z });
-      post("fit", { value: fitting ? z : fitZoom() });
+      /* Only when it has actually moved. Following a pane produces a zoom change per
+         frame, and telling the app about each one is a message a frame for a status bar
+         that reads "Fit" throughout. A tenth of a percent is below what the readout can
+         show. */
+      if (Math.abs(z - reported) > 0.001) {
+        reported = z;
+        post("zoom", { value: z });
+        post("fit", { value: fitting ? z : fitZoom() });
+      }
     });
     return z;
   };
@@ -435,7 +443,15 @@
     var natural = page.offsetWidth;
     var available = contentWidth(page.parentElement || document.body);
     if (!available || !natural) return parseFloat(page.style.zoom) || 1;
-    return Math.max(0.35, Math.min(3, available / natural));
+    /* A pixel short of exact, and deliberately.
+     *
+     * Fitting to the last pixel puts the sheet on the boundary at which a horizontal
+     * scrollbar appears — and a scrollbar takes width away from `clientWidth`, which makes
+     * the next fit smaller, which removes the scrollbar, which makes it bigger again. Now
+     * that the fit runs on every frame of a pane animation rather than once at the end,
+     * that loop would run at sixty hertz. One pixel is invisible beside a
+     * twenty-four-point gutter and there is no boundary to sit on. */
+    return Math.max(0.35, Math.min(3, (available - 1) / natural));
   }
 
   /* The width actually available INSIDE an element.
@@ -784,20 +800,35 @@
       post("selection", { has: !!(sel && !sel.isCollapsed && flatten(sel.toString())) });
     });
     /* Marks and boxes are positioned from measured geometry, so anything that reflows the
-       page has to redraw them. Debounced: a resize fires continuously and a repaint per
-       frame of a window drag is wasted work. */
+       page has to redraw them.
+     *
+     * While FITTING, the refit happens on every resize event with no debounce at all.
+     * That is the whole difference between a page that follows its pane and one that
+     * snaps: a pane sliding open animates its width over a quarter of a second, and the
+     * web view is resized the whole way — so a debounced refit does nothing until the
+     * movement stops and then jumps to the answer. Worse on the way in than out, because
+     * for those frames the sheet is wider than the pane it is in and slides under the
+     * neighbour.
+     *
+     * It costs a repaint per frame of the animation, which is a repaint of a few dozen
+     * marks — cheap, and it is what the resize is FOR. Vaelora reaches the same place by
+     * the opposite road: it is handed the pane's final width immediately, works out the
+     * fit itself, and eases the page to it over the same beat with the same curve. Here
+     * the web view is resized frame by frame, so following it is both simpler and more
+     * exact.
+     *
+     * Not fitting, there is nothing to track: the zoom is a number the reviewer chose, and
+     * only the marks need moving. That stays debounced. */
     var pending = 0;
     window.addEventListener("resize", function () {
+      if (fitting) {
+        window.rvSetZoom(0);
+        return;
+      }
       clearTimeout(pending);
       pending = setTimeout(function () {
-        // Re-fit FIRST if that is the mode, because fitting reflows the page and the marks
-        // are positioned from where the blocks end up.
-        if (fitting) {
-          window.rvSetZoom(0);
-        } else {
-          paint();
-          post("fit", { value: fitZoom() });
-        }
+        paint();
+        post("fit", { value: fitZoom() });
       }, 80);
     });
   }
