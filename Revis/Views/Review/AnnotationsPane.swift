@@ -169,20 +169,14 @@ struct AnnotationsPane: View {
                 .focused($focused, equals: .draft)
                 .onSubmit { model.commitDraft() }
             HStack(spacing: 8) {
-                // The reason Add is unavailable, in the space the row already has.
-                //
-                // Add is enabled on an empty Remove and disabled on an empty Change, and
-                // without this that difference is invisible — the button appears to enable
-                // itself at random as you change the type. Put in the leading space the row
-                // was spacing with anyway, so showing it moves nothing.
-                if !canCommit(draft) {
-                    Text(draft.intent.missingInstruction)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                }
-                Spacer(minLength: 4)
+                // No explanatory line beside the buttons. There was one — it said what the
+                // field was missing — and it was noise: the placeholder in the field
+                // directly above is already asking the question, and a prompt answered
+                // twice reads as the app not trusting you to have read it once. What the
+                // difference between an enabled and a disabled Add rests on is carried by
+                // the placeholder instead, which says "(optional)" where words are not
+                // needed.
+                Spacer()
                 Button("Cancel") { model.cancelDraft() }
                     .keyboardShortcut(.cancelAction)
                 // Explicitly prominent and explicitly tinted: a plain default button takes
@@ -236,13 +230,12 @@ struct AnnotationsPane: View {
                     get: { model.annotation(annotation.id)?.intent ?? annotation.intent },
                     set: { model.setIntent($0, for: annotation.id) }))
                 Spacer()
+                if let verdict = annotation.verdict {
+                    badge(verdict.title, colour: Color(hex: verdict.hex),
+                          help: annotation.verdictBy.map { "\(verdict.title) by \($0)" })
+                }
                 if annotation.status == .resolved {
-                    Text("Resolved")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 5).padding(.vertical, 2)
-                        .background(Color.primary.opacity(0.07),
-                                    in: Capsule())
+                    badge("Resolved", colour: .secondary, help: nil)
                 }
             }
 
@@ -264,8 +257,7 @@ struct AnnotationsPane: View {
                 // An annotation that needs no words is complete without them, and must
                 // not read as unfinished.
                 Text(annotation.intent.needsInstruction ? "Nothing written yet"
-                     : (annotation.intent == .approve ? "Approved as written"
-                        : "No reason given"))
+                                                        : "No reason given")
                     .font(.system(size: 12))
                     .italic()
                     .foregroundStyle(.tertiary)
@@ -277,6 +269,27 @@ struct AnnotationsPane: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 if selected {
+                    // Agreeing or disagreeing with what was asked — a verdict on the
+                    // annotation, which is a different question from whether it has been
+                    // dealt with. Pressing the same one again takes it back.
+                    ForEach(Verdict.allCases, id: \.self) { verdict in
+                        Button {
+                            model.decide(verdict, for: annotation.id)
+                        } label: {
+                            Image(systemName: verdict.symbol)
+                        }
+                        .foregroundStyle(annotation.verdict == verdict
+                                         ? AnyShapeStyle(Color(hex: verdict.hex))
+                                         : AnyShapeStyle(.secondary))
+                        .help(annotation.verdict == verdict
+                              ? "Take back this \(verdict.title.lowercased()) verdict"
+                              : "\(verdict.verb) this — "
+                                + (verdict == .approved
+                                   ? "agree it should be done"
+                                   : "say it should NOT be done; the export will tell the"
+                                     + " reader not to act on it"))
+                    }
+                    Divider().frame(height: 11)
                     if annotation.status == .open {
                         Button("Resolve") { model.resolve(annotation.id) }
                             .help("Mark as dealt with. It stays in the review, and the"
@@ -337,6 +350,16 @@ struct AnnotationsPane: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A small capsule stating something about the row — a verdict, or that it is settled.
+    private func badge(_ text: String, colour: Color, help: String?) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(colour)
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(colour.opacity(0.14), in: Capsule())
+            .help(help ?? text)
     }
 
     private func bar(_ colour: Color) -> some View {
@@ -441,7 +464,11 @@ struct IntentPicker: View {
                 Button {
                     intent = option
                 } label: {
+                    // Explicitly icon AND title: a `Label` in a SwiftUI menu drops its
+                    // icon unless the style says otherwise, so the list came out as seven
+                    // bare words with nothing tying them to the marks on the page.
                     Label(option.title, systemImage: option.symbol)
+                        .labelStyle(.titleAndIcon)
                 }
             }
         } label: {

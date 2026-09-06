@@ -117,29 +117,29 @@ struct ReviewModelTests {
             #expect(model.annotations.isEmpty == intent.needsInstruction,
                     "empty \(intent.rawValue) was \(intent.needsInstruction ? "accepted" : "refused")")
         }
-        // "Delete this" and "leave this alone" are complete instructions; the span says
-        // which text. "Rewrite this" is not — rewrite it to say what?
+        // "Delete this" is a complete instruction; the span says which text. "Rewrite
+        // this" is not — rewrite it to say what?
         #expect(!Intent.remove.needsInstruction)
-        #expect(!Intent.approve.needsInstruction)
         #expect(Intent.change.needsInstruction)
         #expect(Intent.insert.needsInstruction)
         #expect(Intent.move.needsInstruction)
         #expect(Intent.question.needsInstruction)
-        #expect(Intent.note.needsInstruction)
+        #expect(Intent.comment.needsInstruction)
     }
 
-    /// Every intent that needs words says what is missing, and every one that does not
-    /// says what it means on its own. A blank either way is a hint that does not appear.
-    @Test func everyIntentExplainsItself() {
+    /// The prompt is what tells the reviewer whether words are needed — it is the only
+    /// thing that does, now that the hint beside the buttons is gone — and an intent that
+    /// can be committed empty has to say what it means with no words in it.
+    @Test func thePromptSaysWhetherWordsAreNeeded() {
         for intent in Intent.allCases {
             if intent.needsInstruction {
-                #expect(!intent.missingInstruction.isEmpty,
-                        "\(intent.rawValue) disables Add without saying why")
-                #expect(!intent.prompt.hasSuffix("(optional)"))
+                #expect(!intent.prompt.hasSuffix("(optional)"),
+                        "\(intent.rawValue) needs words but its prompt says otherwise")
             } else {
+                #expect(intent.prompt.hasSuffix("(optional)"),
+                        "\(intent.rawValue) can be empty and never says so")
                 #expect(!intent.standsAlone.isEmpty,
                         "\(intent.rawValue) can be empty but the export says nothing")
-                #expect(intent.prompt.hasSuffix("(optional)"))
             }
         }
     }
@@ -156,5 +156,36 @@ struct ReviewModelTests {
         #expect(model.annotations.count == 1)
         #expect(model.annotations.first?.status == .resolved)
         #expect(model.visibleAnnotations.isEmpty)   // the pane defaults to Open
+    }
+
+    /// A verdict is a decision ABOUT an annotation, and the two states it can be in.
+    @Test func aVerdictCanBeGivenAndTakenBack() {
+        let model = model(defaultIntent: .change)
+        model.openDraft(on: anchor)
+        model.draft?.note = "please"
+        model.commitDraft()
+        let id = try! #require(model.annotations.first?.id)
+
+        model.decide(.declined, for: id)
+        #expect(model.annotations.first?.verdict == .declined)
+        #expect(model.annotations.first?.verdictBy?.isEmpty == false)
+        // A declined request is not outstanding work.
+        #expect(!(model.annotations.first?.isActionable ?? true))
+        #expect(model.openCount == 0)
+
+        // The same verdict again takes it back — there is no third button for "no
+        // opinion", so the one you pressed has to be able to undo itself.
+        model.decide(.declined, for: id)
+        #expect(model.annotations.first?.verdict == nil)
+        #expect(model.openCount == 1)
+    }
+
+    /// Reviews written before approving became a verdict must still open.
+    @Test func legacyIntentsAreReadAsComments() throws {
+        for legacy in ["note", "approve"] {
+            let json = Data("\"\(legacy)\"".utf8)
+            #expect(try JSONDecoder().decode(Intent.self, from: json) == .comment)
+        }
+        #expect(try JSONDecoder().decode(Intent.self, from: Data("\"remove\"".utf8)) == .remove)
     }
 }

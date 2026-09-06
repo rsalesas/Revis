@@ -19,9 +19,10 @@ of a gesture, not an instruction.
 
 So Revis never exports a gesture. Every annotation is three things:
 
-1. **An operation** — Change, Insert, Remove, Move, Question, Approve, Note. A required,
-   closed choice, so the reader is told what kind of change is wanted before it reads a
-   word of the note.
+1. **An operation** — Change, Insert, Remove, Move, Question, Comment. A required, closed
+   choice, so the reader is told what kind of change is wanted before it reads a word of
+   the note. There is a button for each in the toolbar, so marking something up is one
+   click; the kind can still be changed afterwards from the row.
 2. **An address made of text** — the exact quoted string, plus the words either side of it.
    A quote is the only address that survives the document being regenerated. Block indices
    and section paths are exported too, but explicitly as secondary hints, because a reader
@@ -54,6 +55,16 @@ Make this 30 days, and say what starts the clock.
 
 Plus a JSON sidecar carrying the same items as fields, for a script that applies a review
 rather than a model that reads one.
+
+### Agreeing and disagreeing
+
+A second reviewer does not annotate the document to say "yes, do that" — they give a
+**verdict** on the annotation itself: Approve or Decline. This matters to the export more
+than it does on screen. A declined request is one somebody refused, so it is taken out of
+the instructions entirely and listed under *Declined* with "do not act on them" — handing
+it over as work would have an assistant make a change that had been explicitly turned down.
+An approved one is marked as agreed, which is the difference between one person's opinion
+and a decision.
 
 ## Safety
 

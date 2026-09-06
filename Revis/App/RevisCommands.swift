@@ -14,19 +14,17 @@ struct RevisCommands: Commands {
         // commands. What it does need is a way to make a mark.
         CommandGroup(after: .textEditing) {
             Divider()
-            Button("Annotate Selection") { review?.beginAnnotationFromSelection() }
+            Button("Annotate Selection") { review?.beginAnnotation() }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
                 .disabled(review?.hasSelection != true)
 
             Menu("Annotate As") {
                 ForEach(Intent.allCases) { intent in
-                    Button(intent.title) {
-                        review?.beginAnnotationFromSelection()
-                        // The intent is applied to whatever draft the capture opens. It
-                        // arrives a turn later, since reading the selection out of the web
-                        // view is a round trip.
-                        DispatchQueue.main.async { review?.draft?.intent = intent }
-                    }
+                    // The kind is handed to the capture and applied when the page answers.
+                    // It used to be set a turn later with a `DispatchQueue.main.async`,
+                    // which is a guess about when the round trip lands rather than a fact
+                    // about it.
+                    Button(intent.title) { review?.beginAnnotation(intent) }
                 }
             }
             .disabled(review?.hasSelection != true)

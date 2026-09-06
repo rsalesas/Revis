@@ -32,9 +32,14 @@ enum ReviewExport {
         let ordered = file.annotations.inDocumentOrder()
         let visible = ordered.filter { filter.admits($0) }
         let open = visible.filter { $0.status == .open }
-        let requests = open.filter { $0.intent.bucket == .edit }
-        let questions = open.filter { $0.intent.bucket == .question }
-        let observations = open.filter { $0.intent.bucket == .observation }
+        // A declined annotation is one a reviewer refused. It is not work, and handing it
+        // over as work would have an assistant make a change somebody explicitly said no
+        // to — which is worse than losing the annotation altogether.
+        let live = open.filter { $0.verdict != .declined }
+        let declined = ordered.filter { $0.verdict == .declined && $0.status == .open }
+        let requests = live.filter { $0.intent.bucket == .edit }
+        let questions = live.filter { $0.intent.bucket == .question }
+        let observations = live.filter { $0.intent.bucket == .observation }
         let resolved = ordered.filter { $0.status == .resolved }
 
         var out = "# Review of \(file.document.title ?? file.source.name)\n\n"
@@ -43,7 +48,7 @@ enum ReviewExport {
 
         if requests.isEmpty && questions.isEmpty && observations.isEmpty {
             out += "\n## Nothing outstanding\n\nNo changes are requested.\n"
-            return out + resolvedSection(resolved, includeIn: filter)
+            return out + declinedSection(declined) + resolvedSection(resolved, includeIn: filter)
         }
 
         if !requests.isEmpty {
@@ -71,7 +76,26 @@ enum ReviewExport {
                             number: requests.count + questions.count + index + 1)
             }
         }
-        return out + resolvedSection(resolved, includeIn: filter)
+        return out + declinedSection(declined) + resolvedSection(resolved, includeIn: filter)
+    }
+
+    /// What was asked for and turned down.
+    ///
+    /// Listed rather than dropped, because "somebody suggested this and we decided against
+    /// it" is a thing a reader should know — not least so it is not suggested again.
+    private static func declinedSection(_ declined: [Annotation]) -> String {
+        guard !declined.isEmpty else { return "" }
+        var out = "\n## Declined\n\n"
+        out += "These were proposed and turned down by a reviewer. **Do not act on them.**"
+            + " They are listed so the decision is on the record.\n\n"
+        for annotation in declined {
+            let by = annotation.verdictBy.map { " (declined by \($0))" } ?? ""
+            let note = annotation.note.trimmingCharacters(in: .whitespacesAndNewlines)
+            out += "- **\(annotation.intent.title)** at \(location(annotation)): "
+                + "\"\(annotation.anchor.summary(limit: 80))\""
+                + (note.isEmpty ? "" : " — \(note)") + by + "\n"
+        }
+        return out
     }
 
     /// The instructions to the reader, stated once at the top.
@@ -145,6 +169,14 @@ enum ReviewExport {
 
         if let context = context(annotation.anchor) {
             out += "\n**Context**\n\n" + quoteBlock(context) + "\n"
+        }
+
+        // An agreed item says so. It is the difference between one person's opinion and a
+        // decision, and a reader applying a review is entitled to know which it has.
+        if annotation.verdict == .approved {
+            out += "\n**Agreed**"
+            if let by = annotation.verdictBy { out += " by \(by)" }
+            out += "\n"
         }
 
         let note = annotation.note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -232,6 +264,8 @@ enum ReviewExport {
             var author: String
             var instruction: String
             var status: String
+            var verdict: String?
+            var verdictBy: String?
             var location: String
             var role: String
             var quote: String
@@ -258,6 +292,8 @@ enum ReviewExport {
                      author: annotation.author,
                      instruction: annotation.note,
                      status: annotation.status.rawValue,
+                     verdict: annotation.verdict?.rawValue,
+                     verdictBy: annotation.verdictBy,
                      location: annotation.anchor.path,
                      role: annotation.anchor.role,
                      quote: annotation.anchor.quote,

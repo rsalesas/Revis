@@ -21,8 +21,7 @@ enum AnnotationPalette {
                                            // a request, not an error
         case .move:     return "#8e7bc4"   // violet
         case .question: return "#5b8fc4"   // blue
-        case .approve:  return "#8aa35b"   // olive
-        case .note:     return "#9a9a9e"   // grey — not a request, so not a hue
+        case .comment:  return "#9a9a9e"   // grey — not a request, so not a hue
         }
     }
 

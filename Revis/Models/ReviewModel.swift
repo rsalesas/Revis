@@ -233,7 +233,7 @@ final class ReviewModel: ObservableObject {
         annotations.inDocumentOrder().filter { filter.admits($0) }
     }
 
-    var openCount: Int { annotations.filter { $0.status == .open }.count }
+    var openCount: Int { annotations.filter(\.isActionable).count }
 
     /// Where in the visible list an open draft belongs — the position it will occupy once
     /// it is added.
@@ -259,18 +259,28 @@ final class ReviewModel: ObservableObject {
 
     // MARK: - Making one
 
+    /// What the capture in flight should become, when one was asked for by type.
+    ///
+    /// Carried rather than passed, because the capture is a round trip: the toolbar asks
+    /// for a Remove, the page answers a turn later, and by then the button that knew which
+    /// kind it was is long out of the picture.
+    private var pendingIntent: Intent?
+
     /// Ask the runtime what is selected. The draft opens when the answer comes back
     /// through `receive(anchor:)` — nothing happens here if there is no selection, which
     /// is why the command is disabled without one rather than failing silently.
-    func beginAnnotationFromSelection() {
+    func beginAnnotation(_ intent: Intent? = nil) {
         guard hasSelection else { return }
+        pendingIntent = intent
         captureToken &+= 1
     }
 
     /// The runtime's answer, or nil when the selection turned out to be empty.
     func receive(anchor: Anchor?) {
+        let intent = pendingIntent
+        pendingIntent = nil
         guard let anchor else { return }
-        openDraft(on: anchor)
+        openDraft(on: anchor, intent: intent)
     }
 
     func openDraft(on anchor: Anchor, intent: Intent? = nil) {
@@ -278,6 +288,14 @@ final class ReviewModel: ObservableObject {
         selectedID = nil
         draft = AnnotationDraft(anchor: anchor, intent: intent ?? defaultIntent,
                                 token: draftCounter)
+        // Opening a draft into a closed pane writes the note somewhere nobody can see and
+        // offers an Add button nobody can reach. Whatever else the reviewer meant by
+        // marking something, they did not mean that.
+        //
+        // Set plainly rather than inside `withMotion`: the split animates on this value
+        // changing (see `CollapsibleSidePane`), so the pane slides in either way, and the
+        // model has no business knowing how the view animates.
+        annotationsVisible = true
     }
 
     func commitDraft() {
@@ -328,6 +346,13 @@ final class ReviewModel: ObservableObject {
         annotations[index].status = .open
     }
 
+    /// Agree or disagree with an annotation — including one's own, since a reviewer
+    /// rereading their own list is entitled to change their mind about it.
+    func decide(_ verdict: Verdict?, for id: UUID) {
+        guard let index = index(of: id) else { return }
+        annotations[index].decide(verdict, by: author)
+    }
+
     func delete(_ id: UUID) {
         annotations.removeAll { $0.id == id }
         if selectedID == id { selectedID = nil }
@@ -335,11 +360,23 @@ final class ReviewModel: ObservableObject {
 
     // MARK: - Moving about
 
-    /// Choose an annotation and take the document to it. Both directions are this one
-    /// call, so clicking a marker and clicking a row cannot end up meaning different
-    /// things.
-    func reveal(_ id: UUID) {
+    /// Choose an annotation, from the DOCUMENT — a margin mark, a region box, a run of
+    /// highlighted words.
+    ///
+    /// The pane opens, because otherwise clicking a mark does nothing you can see: the row
+    /// it selects is behind a closed pane, and the app looks like it ignored you. And the
+    /// document is deliberately NOT scrolled — you clicked something you were already
+    /// looking at, and moving the page out from under the click is the app arguing with
+    /// you about where you are.
+    func select(_ id: UUID) {
         selectedID = id
+        annotationsVisible = true
+    }
+
+    /// Choose an annotation from the PANE, and take the document to it — here the mark is
+    /// the thing you cannot see, so it is the thing that has to move.
+    func reveal(_ id: UUID) {
+        select(id)
         revealToken &+= 1
     }
 
@@ -368,7 +405,11 @@ final class ReviewModel: ObservableObject {
             var rect: NormalizedRect?
         }
         var wire = visibleAnnotations.map {
-            Wire(id: $0.id.uuidString, intent: $0.intent.rawValue, status: $0.status.rawValue,
+            Wire(id: $0.id.uuidString, intent: $0.intent.rawValue,
+                 // A declined annotation is drawn like a settled one: it is still on the
+                 // page, because the review records that somebody said no, but it must not
+                 // read as outstanding.
+                 status: $0.isActionable ? "open" : "resolved",
                  blocks: $0.anchor.blocks, start: $0.anchor.start, end: $0.anchor.end,
                  rect: $0.anchor.rect)
         }

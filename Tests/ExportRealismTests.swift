@@ -109,9 +109,9 @@ struct ExportRealismTests {
                              path: "3. Retention periods › 3.2 Derived and aggregate data"
                                  + " › paragraph 2", in: text)),
 
-            // 5. An approval. The model must LEAVE THIS ALONE — a review that cannot say
-            //    "do not touch this" is a review that gets its good parts rewritten.
-            note(.approve, "This definition is exactly right; do not reword it.",
+            // 5. A comment: something worth knowing, asking for no edit.
+            note(.comment, "This definition is the one everything else leans on — worth"
+                 + " keeping exactly as it is.",
                  Self.anchor("Irreversible removal from primary storage, all replicas, and"
                              + " all backups taken after the deletion request.", block: 9,
                              path: "2. Definitions › definition 2", role: "definition",
@@ -130,7 +130,17 @@ struct ExportRealismTests {
                    start: -1, end: -1,
                    rect: NormalizedRect(x: 0.0, y: 0.0, width: 1.0, height: 1.0))))
 
-        // 7. A point rather than a span: something has to be added after this paragraph.
+        // 7. A request that a second reviewer TURNED DOWN. The export must tell the
+        //    reader not to act on it — a declined suggestion handed over as work is a
+        //    change somebody explicitly refused.
+        var refused = note(.change, "Make the retention worker run every fifteen minutes.",
+                           Self.anchor("The retention worker runs hourly.", block: 21,
+                                       path: "4. Deletion mechanics › paragraph 1",
+                                       in: text))
+        refused.decide(.declined, by: "Robert Salesas")
+        annotations.append(refused)
+
+        // 8. A point rather than a span: something has to be added after this paragraph.
         annotations.append(note(
             .insert, "Add a sentence here saying what happens when a replica is offline at"
                 + " the moment the delete is issued.",

@@ -24,10 +24,11 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
     case move
     /// A question about this — no change asked for yet.
     case question
-    /// This is right. Recorded so a review can say what NOT to touch.
-    case approve
     /// An observation with no request attached.
-    case note
+    ///
+    /// Called `comment` because that is what it is. It was `note`, and nobody writing one
+    /// thinks of it as a note; they think they are commenting on the document.
+    case comment
 
     var id: String { rawValue }
 
@@ -39,8 +40,7 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
         case .remove:   return "Remove"
         case .move:     return "Move"
         case .question: return "Question"
-        case .approve:  return "Approve"
-        case .note:     return "Note"
+        case .comment:  return "Comment"
         }
     }
 
@@ -52,12 +52,11 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
         case .remove:   return "strikethrough"
         case .move:     return "arrow.up.arrow.down"
         case .question: return "questionmark"
-        case .approve:  return "checkmark"
-        // `bubble`, not `text.bubble`. The seven marks want to read as one set, and the
-        // one with lines drawn inside it carried noticeably more ink than the other six —
-        // it looked a size larger at the same point size, which is exactly the thing a row
-        // of type labels must not do. An empty bubble is the same idea at the same weight.
-        case .note:     return "bubble"
+        // `bubble`, not `text.bubble`. The marks want to read as one set, and the one with
+        // lines drawn inside it carried noticeably more ink than the rest — it looked a
+        // size larger at the same point size, which is exactly the thing a row of type
+        // labels must not do. An empty bubble is the same idea at the same weight.
+        case .comment:  return "bubble"
         }
     }
 
@@ -74,8 +73,7 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
         case .remove:   question = "Why should this come out?"
         case .move:     question = "Where should this go?"
         case .question: question = "What do you want to know?"
-        case .approve:  question = "Anything to preserve about it?"
-        case .note:     question = "What did you notice?"
+        case .comment:  question = "What did you want to say?"
         }
         return needsInstruction ? question : question + " (optional)"
     }
@@ -92,22 +90,8 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
     /// beside the Add button, and the "(optional)" the prompt grows.
     var needsInstruction: Bool {
         switch self {
-        case .remove, .approve: return false
-        case .change, .insert, .move, .question, .note: return true
-        }
-    }
-
-    /// What the field is missing, when it is missing something. Shown beside a disabled
-    /// Add button — a control that is disabled for reasons the reviewer cannot see is a
-    /// control that reads as broken.
-    var missingInstruction: String {
-        switch self {
-        case .change:   return "Say what it should say instead"
-        case .insert:   return "Say what to add"
-        case .move:     return "Say where it should go"
-        case .question: return "Write the question"
-        case .note:     return "Write the note"
-        case .remove, .approve: return ""
+        case .remove: return false
+        case .change, .insert, .move, .question, .comment: return true
         }
     }
 
@@ -115,9 +99,28 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
     /// reachable for the two that do not need any.
     var standsAlone: String {
         switch self {
-        case .remove:  return "_No reason given; the deletion is the instruction._"
-        case .approve: return "_Approved as written; leave unchanged._"
-        default:       return ""
+        case .remove: return "_No reason given; the deletion is the instruction._"
+        default:      return ""
+        }
+    }
+
+    /// Read leniently, so a review written by an older build still opens.
+    ///
+    /// `approve` and `note` were both intents once. Approving is a verdict on somebody
+    /// else's annotation now rather than a thing you write on a document, and `note` was
+    /// only ever a comment by another name — but a file full of them is still a file
+    /// somebody's afternoon went into, and a format that refuses to open one has lost it.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        switch raw {
+        case "note", "approve": self = .comment
+        default:
+            guard let intent = Intent(rawValue: raw) else {
+                throw DecodingError.dataCorrupted(.init(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "unknown annotation intent \"\(raw)\""))
+            }
+            self = intent
         }
     }
 
@@ -130,8 +133,7 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
         case .remove:   return "Delete the quoted text."
         case .move:     return "Relocate the quoted text."
         case .question: return "Answer this question about the quoted text."
-        case .approve:  return "Leave the quoted text as it is."
-        case .note:     return "Take this observation into account."
+        case .comment:  return "Take this comment into account."
         }
     }
 
@@ -147,9 +149,31 @@ enum Intent: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .change, .insert, .remove, .move: return .edit
         case .question: return .question
-        case .approve, .note: return .observation
+        case .comment: return .observation
         }
     }
+}
+
+/// One reviewer's verdict on another's annotation.
+///
+/// **Why this is not an intent.** Approving used to be something you wrote on the
+/// document — "this bit is right". That was the wrong shape, and it showed as soon as a
+/// second person read a review: what you actually want to say is not "this paragraph is
+/// fine" but "yes, do what they asked" or "no, leave it". A verdict is *about an
+/// annotation*, so it belongs on one.
+///
+/// It also changes the export in a way an intent never could. A declined request is a
+/// request the team decided against, and handing it to an assistant anyway would have it
+/// make a change somebody had explicitly refused.
+enum Verdict: String, Codable, CaseIterable, Sendable {
+    case approved, declined
+
+    var title: String { self == .approved ? "Approved" : "Declined" }
+    var verb: String { self == .approved ? "Approve" : "Decline" }
+    var symbol: String { self == .approved ? "checkmark" : "xmark" }
+    /// Olive for agreement; grey for a refusal. Deliberately NOT a red — declining a
+    /// colleague's suggestion is a decision, not an error.
+    var hex: String { self == .approved ? "#8aa35b" : "#9a9a9e" }
 }
 
 /// Whether an annotation is still outstanding.
@@ -245,6 +269,25 @@ struct Annotation: Identifiable, Codable, Equatable, Sendable {
     var note: String
     var anchor: Anchor
     var status: AnnotationStatus = .open
+    /// What a reviewer decided about this annotation, if anyone has.
+    var verdict: Verdict?
+    /// Who decided. Kept because "declined" without a name is an anonymous veto.
+    var verdictBy: String?
+
+    /// Whether this should be acted on. A declined request is one somebody refused.
+    var isActionable: Bool { status == .open && verdict != .declined }
+
+    mutating func decide(_ verdict: Verdict?, by author: String) {
+        // Choosing the same verdict twice takes it back, the way a toggle does — there is
+        // no third button for "actually, no opinion".
+        if self.verdict == verdict {
+            self.verdict = nil
+            verdictBy = nil
+        } else {
+            self.verdict = verdict
+            verdictBy = author
+        }
+    }
 
     /// Document order, so the pane and the export both read down the page.
     ///

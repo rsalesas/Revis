@@ -95,7 +95,8 @@ struct ReviewView: View {
                 // The draft's own mark is not something to select — it is already the
                 // thing being worked on.
                 guard id != ReviewModel.draftID, let uuid = UUID(uuidString: id) else { return }
-                model.reveal(uuid)
+                // `select`, not `reveal`: this came from the page, so the page stays put.
+                model.select(uuid)
             },
             onAnchor: { model.receive(anchor: $0) },
             onZoom: { model.receive(zoom: $0) },
@@ -119,20 +120,33 @@ struct ReviewView: View {
             .labelsHidden()
             .help("Select text, or drag a box over part of the page")
             .disabled(model.isEmpty)
+
+            // A divider, because these are two different questions. The picker on the left
+            // is HOW you are pointing; the buttons on the right are WHAT you are asking
+            // for. Run together they read as one row of nine unrelated controls.
+            Divider()
+
+            // One button per kind, so marking something up is a single click rather than a
+            // click and then a menu. The kind is still changeable afterwards from the row
+            // in the pane — this is the quick way in, not the only way.
+            ForEach(Intent.allCases) { intent in
+                Button {
+                    model.beginAnnotation(intent)
+                } label: {
+                    Label(intent.title, systemImage: intent.symbol)
+                }
+                // Carrying the intent's own colour, which is the same colour its mark and
+                // its row will be. The toolbar is where that association is learned.
+                .foregroundStyle(AnnotationPalette.color(for: intent))
+                // Disabled rather than hidden: a control you can see and cannot use says
+                // why, and a missing one says nothing at all.
+                .disabled(!model.hasSelection)
+                .help(model.hasSelection ? "\(intent.title) — \(intent.directive)"
+                      : "Select some text in the document first")
+            }
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                model.beginAnnotationFromSelection()
-            } label: {
-                Label("Annotate", systemImage: "plus.bubble")
-            }
-            // Disabled rather than hidden: a control you can see and cannot use says why,
-            // and a missing one says nothing at all.
-            .disabled(!model.hasSelection)
-            .help(model.hasSelection ? "Annotate the selected text (⌘⇧A)"
-                  : "Select some text in the document first")
-
             Button {
                 NotificationCenter.default.post(name: .revisShowExport, object: model)
             } label: {
