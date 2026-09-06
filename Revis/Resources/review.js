@@ -618,10 +618,36 @@
    * One column, not several. Vaelora stacks its marks three across because it has a whole
    * page margin to play with; this gutter is thirty-four points wide, and two columns of a
    * hittable box do not fit in it. Marks on the same line stack downward instead. */
-  var SLOT_W = 30;         // painted; the box a mark lives in
-  var SLOT_H = 22;
-  var MARK = 15;           // painted; the mark drawn inside it
+  var SLOT_W = 38;         // painted; the box a mark lives in
+  var SLOT_H = 26;
+  var MARK = 19;           // painted; the mark drawn inside it
   var SLOT_COLS = 1;
+
+  /* Pressing anywhere in the gutter chooses the mark on that line.
+   *
+   * The marks are furniture — small on purpose, because they sit beside somebody else's
+   * document — and a small thing is a thing you miss. Nothing else lives in this strip, so
+   * there is no reason to make the reviewer hit the fifteen points of ink rather than the
+   * line it is on. Bound once, on the gutter, rather than per mark: the marks are rebuilt
+   * on every repaint and this is not. */
+  function pressGutter(event) {
+    if (!gutter) return;
+    var origin = gutter.getBoundingClientRect();
+    var y = cssPoint(event).y - origin.top;
+    var best = null, bestGap = Infinity;
+    for (var i = 0; i < gutter.children.length; i++) {
+      var el = gutter.children[i];
+      var top = parseFloat(el.style.top) || 0;
+      var height = parseFloat(el.style.height) || 0;
+      var gap = Math.abs(y - (top + height / 2));
+      if (gap < bestGap) { bestGap = gap; best = el; }
+    }
+    // Within half a row of a mark, and no further: the strip runs the height of the page,
+    // and a press level with nothing should stay a press level with nothing.
+    if (!best || bestGap > (SLOT_H / zoom)) return;
+    event.preventDefault();
+    post("pick", { id: best.getAttribute("data-rv-for") });
+  }
 
   function paintMarkers() {
     gutter.innerHTML = "";
@@ -665,6 +691,22 @@
       mark.setAttribute("tabindex", "0");
       mark.setAttribute("aria-label", a.intent + " annotation"
                         + (a.status === "resolved" ? ", resolved" : ""));
+      /* On MOUSEDOWN, and bound to the element rather than delegated from the document.
+       *
+       * A `click` is only delivered to the element if the press AND the release both land
+       * on it; drift a pixel off a small mark between the two and the browser dispatches
+       * the click to the common ancestor instead — here the gutter, which is transparent
+       * to the pointer, so it lands on the sheet and nothing happens. That is not a rare
+       * accident with a hand-held mouse on a target this size, and it presents exactly as
+       * "clicking does nothing". Pressing is unambiguous, and it is what a button-like
+       * control should answer to anyway.
+       *
+       * `preventDefault` so pressing a mark does not also start selecting the page. */
+      mark.addEventListener("mousedown", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        post("pick", { id: this.getAttribute("data-rv-for") });
+      });
       gutter.appendChild(mark);
     }
   }
@@ -726,6 +768,7 @@
     stamp();
 
     document.addEventListener("click", handleClick, true);
+    gutter.addEventListener("mousedown", pressGutter);
     document.addEventListener("mousedown", beginDrag, true);
     document.addEventListener("mousemove", moveDrag, true);
     document.addEventListener("mouseup", endDrag, true);
