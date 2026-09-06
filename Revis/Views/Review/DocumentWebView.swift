@@ -380,6 +380,10 @@ enum PageLog {
     private static let url: URL? = ProcessInfo.processInfo.environment["REVIS_PAGE_LOG"]
         .map { URL(fileURLWithPath: $0) }
 
+    /// Whether anything is listening. The page's own diagnostics are switched on to match,
+    /// so a shipped build neither writes nor computes them.
+    static var isOn: Bool { url != nil }
+
     static func write(_ message: String) {
         guard let url else { return }
         let line = "\(Date().timeIntervalSince1970) \(message)\n"

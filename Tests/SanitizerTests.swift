@@ -131,7 +131,7 @@ struct AnnotationSymbolTests {
     }
 
     @Test func theSymbolNamesResolve() {
-        for name in [AnnotationSymbols.marker, AnnotationSymbols.resolved,
+        for name in [AnnotationSymbols.disc, AnnotationSymbols.hollow,
                      AnnotationSymbols.pending] {
             #expect(NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
                     "\(name) is not an SF Symbol on this system")

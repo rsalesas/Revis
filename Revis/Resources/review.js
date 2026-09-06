@@ -141,6 +141,18 @@
     post("ready", { blocks: blocks.length, outline: outline });
   }
 
+  /* A mouse event's position in the page's OWN coordinate space.
+   *
+   * Events arrive in viewport coordinates, which include the zoom; every layout API inside
+   * the zoomed subtree — `getBoundingClientRect`, and the offsets the marks are placed
+   * with — reports the element's own, unzoomed space. The two are the same number at 100%
+   * and nowhere else, which is the worst way for a units bug to behave: it works while you
+   * are building it and is wrong for every user who touches the zoom. Anything comparing a
+   * pointer against laid-out geometry goes through here. */
+  function cssPoint(event) {
+    return { x: event.clientX / zoom, y: event.clientY / zoom };
+  }
+
   function flatten(text) {
     return (text || "").replace(/\s+/g, " ").trim();
   }
@@ -332,7 +344,7 @@
   function beginDrag(event) {
     if (tool !== "region" || event.button !== 0) return;
     event.preventDefault();
-    dragging = { x: event.clientX, y: event.clientY };
+    dragging = cssPoint(event);
     dragBox = document.createElement("div");
     dragBox.className = "rv-drag";
     overlay.appendChild(dragBox);
@@ -341,7 +353,7 @@
 
   function moveDrag(event) {
     if (!dragging || !dragBox) return;
-    var rect = rectBetween(dragging, { x: event.clientX, y: event.clientY });
+    var rect = rectBetween(dragging, cssPoint(event));
     var origin = overlay.getBoundingClientRect();
     dragBox.style.left = (rect.left - origin.left) + "px";
     dragBox.style.top = (rect.top - origin.top) + "px";
@@ -351,7 +363,7 @@
 
   function endDrag(event) {
     if (!dragging) return;
-    var rect = rectBetween(dragging, { x: event.clientX, y: event.clientY });
+    var rect = rectBetween(dragging, cssPoint(event));
     dragging = null;
     if (dragBox) { dragBox.remove(); dragBox = null; }
     /* A click is not a drag. Below this the box is smaller than the pointer's own jitter,
@@ -596,14 +608,25 @@
    * inherit the zoom it grew with the words, which is how the margin ended up with a
    * fifteen-point mark painted at twenty-six.
    */
-  var SLOT = 21;           // painted; the box a mark lives in
+  /* The mark is fifteen points; the box you can click is thirty by twenty-two.
+   *
+   * They were the same size, and a fifteen-point target in a margin is one you miss — and
+   * missing it now does nothing at all, which reads as a mark that is not clickable. The
+   * visible mark stays small because it is furniture beside somebody's document; the thing
+   * that catches the pointer does not have to be.
+   *
+   * One column, not several. Vaelora stacks its marks three across because it has a whole
+   * page margin to play with; this gutter is thirty-four points wide, and two columns of a
+   * hittable box do not fit in it. Marks on the same line stack downward instead. */
+  var SLOT_W = 30;         // painted; the box a mark lives in
+  var SLOT_H = 22;
   var MARK = 15;           // painted; the mark drawn inside it
-  var SLOT_COLS = 2;       // marks on one line sit side by side, then wrap
+  var SLOT_COLS = 1;
 
   function paintMarkers() {
     gutter.innerHTML = "";
     var origin = gutter.getBoundingClientRect();
-    var slot = SLOT / zoom;
+    var slotW = SLOT_W / zoom, slotH = SLOT_H / zoom;
     var rows = {};
     for (var i = 0; i < annotations.length; i++) {
       var a = annotations[i];
@@ -620,20 +643,20 @@
          to the heading above the paragraph they belonged to. The SIZES are a different
          question and do divide: a mark should be the same size on screen at any zoom. */
       var top = box.top - origin.top;
-      var row = Math.round(top / (slot * 0.75));   // marks close together share a row
+      var row = Math.round(top / (slotH * 0.75));   // marks close together share a row
       var index = rows[row] = (rows[row] === undefined ? 0 : rows[row] + 1);
 
       var mark = document.createElement("div");
       mark.className = "rv-marker"
         + (a.id === selectedID ? " current" : "")
         + (a.id === "draft" ? " pending" : "");
-      mark.style.width = slot + "px";
-      mark.style.height = slot + "px";
+      mark.style.width = slotW + "px";
+      mark.style.height = slotH + "px";
       mark.style.backgroundSize = (MARK / zoom) + "px";
       mark.style.backgroundImage = imageFor(a);
-      mark.style.left = ((index % SLOT_COLS) * slot) + "px";
-      mark.style.top = (top - slot / 2
-                        + Math.floor(index / SLOT_COLS) * slot) + "px";
+      mark.style.left = ((index % SLOT_COLS) * slotW) + "px";
+      mark.style.top = (top - slotH / 2
+                        + Math.floor(index / SLOT_COLS) * slotH) + "px";
       mark.setAttribute("data-rv-for", a.id);
       /* A real control rather than a decorated div: it is the only way to reach an
          annotation from the page without a mouse, and it is what puts the mark in the

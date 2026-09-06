@@ -15,21 +15,15 @@ import AppKit
 /// be internally asymmetric, and it is the same mark the rest of the app would draw.
 enum AnnotationSymbols {
 
-    /// An open annotation: a ring with a filled centre, so it reads as a mark made on the
-    /// page rather than as a dot of ink.
-    static let marker = "inset.filled.circle"
-    /// One that has been dealt with — the same circle, hollow. It is still on the page,
-    /// because the review records that it was answered, but it must not read as
-    /// outstanding.
-    static let resolved = "circle"
+    /// The disc every mark is drawn on.
+    static let disc = "circle.fill"
+    /// A settled or refused one: the same circle, hollow. It is still on the page, because
+    /// the review records that it was answered, but it must not read as outstanding.
+    static let hollow = "circle"
     /// An annotation being written but not yet in the review.
     static let pending = "circle"
 
-    /// The two colours a mark is drawn in: the centre, then the ring.
-    ///
-    /// That order is the symbol's own. The ring is the intent's colour darkened rather
-    /// than a black outline, so the mark still reads as one colour at a glance — which is
-    /// what makes "what is being asked here" legible at fifteen points.
+    /// The two colours a hollow mark is drawn in.
     static func palette(for hex: String) -> [NSColor] {
         let colour = NSColor(hex: hex)
         return [colour, colour.darkened(by: 0.24)]
@@ -130,23 +124,90 @@ enum AnnotationSymbols {
         return url
     }
 
+    /// A mark: the intent's own glyph, in white, on a disc of the intent's colour.
+    ///
+    /// **Why not one shape for all of them, as Vaelora has.** There, a mark's colour says
+    /// WHO wrote the comment, and a person has no glyph — so one shape in several colours
+    /// is the whole vocabulary. Here the colour says WHAT is being asked, and what is being
+    /// asked already has a glyph: the one on the row in the pane, and the one on the button
+    /// in the toolbar. Leaving the margin as plain coloured dots meant the only thing tying
+    /// a mark to its card was a colour you had to have learned, and the honest reaction to
+    /// that is "why are these different colours?" — which is exactly the question it drew.
+    /// Carrying the same glyph answers it without anybody having to be told.
+    ///
+    /// White on a filled disc rather than the glyph alone, because a fifteen-point
+    /// `arrow.up.arrow.down` in a thin stroke is a smudge on paper. A disc reads at that
+    /// size, and the glyph on it reads because it has a solid ground behind it.
+    @MainActor
+    private static func mark(_ intent: Intent) -> String {
+        let hex = AnnotationPalette.hex(for: intent)
+        let key = "m\(intent.rawValue)\(hex)"
+        if let hit = cache[key] { return hit }
+        let url = composed(glyph: intent.symbol, on: NSColor(hex: hex)) ?? ""
+        cache[key] = url
+        return url
+    }
+
+    /// The glyph drawn over the disc, both rasterised well above the size they are shown
+    /// at and composited as ONE image — so what the page scales down is a single picture
+    /// and cannot come apart at fractional pixel sizes.
+    static func composed(glyph: String, on colour: NSColor, side: CGFloat = 88) -> String? {
+        guard let disc = symbolImage(disc, palette: [colour], side: side, weight: .regular),
+              let mark = symbolImage(glyph, palette: [.white], side: side * 0.46,
+                                     weight: .bold)
+        else { return nil }
+
+        let canvas = max(disc.size.width, disc.size.height).rounded(.up)
+        guard canvas > 0,
+              let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: Int(canvas * 2), pixelsHigh: Int(canvas * 2),
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        else { return nil }
+        rep.size = NSSize(width: canvas, height: canvas)
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        disc.draw(in: NSRect(x: (canvas - disc.size.width) / 2,
+                             y: (canvas - disc.size.height) / 2,
+                             width: disc.size.width, height: disc.size.height))
+        mark.draw(in: NSRect(x: (canvas - mark.size.width) / 2,
+                             y: (canvas - mark.size.height) / 2,
+                             width: mark.size.width, height: mark.size.height))
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let squared = squaredToInk(rep),
+              let png = squared.representation(using: .png, properties: [:]) else { return nil }
+        return "data:image/png;base64," + png.base64EncodedString()
+    }
+
+    private static func symbolImage(_ name: String, palette: [NSColor], side: CGFloat,
+                                    weight: NSFont.Weight) -> NSImage? {
+        let configuration = NSImage.SymbolConfiguration(pointSize: side, weight: weight)
+            .applying(NSImage.SymbolConfiguration(paletteColors: palette))
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(configuration)
+        image?.isTemplate = false
+        return image
+    }
+
     /// Every image the page needs, keyed the way the runtime asks for them: the intent's
     /// name for an open mark, `intent:resolved` for a settled one, and `pending` for one
     /// being written.
     ///
     /// Built here rather than in JavaScript for the reason everything shared is: one
     /// source, two readers. The pane's row and the margin's mark are drawn by different
-    /// code and must not be able to disagree about what colour an intent is.
+    /// code and must not be able to disagree about what an intent looks like.
     @MainActor
     static func images() -> [String: String] {
         var out: [String: String] = [:]
         for intent in Intent.allCases {
             let hex = AnnotationPalette.hex(for: intent)
-            out[intent.rawValue] = cached(marker, palette: palette(for: hex), key: "m\(hex)")
+            out[intent.rawValue] = mark(intent)
             // Hollow, and drawn bold: a plain ring at fifteen points is a hairline and
             // reads as a smudge rather than as a mark.
             out["\(intent.rawValue):resolved"] = cached(
-                resolved, palette: [NSColor(hex: hex)], key: "r\(hex)", weight: .bold)
+                hollow, palette: [NSColor(hex: hex)], key: "r\(hex)", weight: .bold)
         }
         out["pending"] = cached(pending, palette: [NSColor(hex: AnnotationPalette.hex(for: .change))],
                                 key: "p", weight: .bold)

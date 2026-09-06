@@ -15,7 +15,7 @@
   --rv-ink: #1c1c1e;
   --rv-rule: rgba(0, 0, 0, 0.10);
   --rv-shadow: rgba(0, 0, 0, 0.16);
-  --rv-gutter-width: 34px;
+  --rv-gutter-width: 32px;
   /* The space round the sheet. One number, used by the stylesheet and measured by the
      runtime, so the top and the sides cannot drift apart. */
   --rv-gutter: 24px;
@@ -235,8 +235,8 @@ html[data-rv-tool="region"] #rv-sheet {
   /* Inside the sheet's right padding, not against its edge. Flush right, the marks sat
      half on the paper and half on the desk behind it, which reads as the window having
      clipped them rather than as the page carrying them. */
-  right: 20px;
-  width: var(--rv-gutter-width);
+  right: 14px;
+  width: 34px;
   pointer-events: none;
 }
 
