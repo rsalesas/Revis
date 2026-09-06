@@ -66,6 +66,35 @@ happens again:
 `run()` in `DocumentWebView` reports evaluation failures rather than swallowing them. Do
 not put that `try?` back.
 
+## The pane-toggle flash (open, and expensive to chase)
+
+Toggling a side pane shows a brief flash at the document's trailing edge. Several things
+that looked like the cause were not, and each is now fixed on its own merits — do not undo
+them while trying something new:
+
+- **The layout must not animate.** A toggle is wrapped in `withAnimation`, and that
+  animation reaches every view in the update, including a hosted `NSView`, which then
+  animates its layer through Core Animation. Measured: twelve intermediate widths over
+  200 ms for one toggle, each a full WebKit re-layout. `paneContent()` strips it.
+- **The panes are three siblings in one row**, not nested containers. Vaelora nests
+  because its layout animates and the nesting decides whose width each animation comes
+  from; that reason does not apply once the layout is instant.
+- **The sheet fills by layout while fitting** (`width: auto`), not by a `zoom` that
+  JavaScript has to set. Anything script-driven arrives a process and a resize event
+  later — around 30-35 ms, measured — and for those frames the sheet is sized for the
+  width before last: wider than the view, so clipped, with text running under the pane.
+- **Do not put a transition on the zoom.** Vaelora eases its page because a page is fixed
+  paper that need not fill anything; this sheet must exactly fill the viewport, so a late
+  zoom is a clipped sheet. `BridgeTests` pins the transition gone.
+
+What remains is the WebKit round trip itself: the view is resized in one step and the page
+reports its new layout roughly two frames later. The only thing that would remove it is not
+resizing the web view on a toggle at all — panes overlaying the document rather than taking
+width from it — which costs the thing the panes exist for, reading a note beside the passage
+it is about. Measure before changing anything here: `REVIS_PAGE_LOG` plus an
+`onGeometryChange` on the document pane gives both sides of the change with timestamps, and
+that is what settled every question above.
+
 ## Testing
 
 `xcodebuild -project Revis.xcodeproj -scheme Revis test`, or `./scripts/build.sh` first if
