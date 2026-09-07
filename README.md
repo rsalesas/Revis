@@ -300,6 +300,3 @@ every item from the quoted text alone, neither needed a character offset, and th
 edited documents came out byte-identical everywhere the review specified an outcome. Both
 also caught, unprompted, that changing the retention period leaves a clause elsewhere
 saying nothing — and reported it rather than fixing it, which is what the export asks for.
-
-Not done yet: freehand drawing and highlighting on the page, comparing two versions of a
-document, and the app icon.
