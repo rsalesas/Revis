@@ -265,7 +265,25 @@ struct AnnotationsPane: View {
                 set: { model.setIntent($0, for: annotation.id) }))
                 .disabled(!model.canEdit(annotation))
                 .help(refusal ?? "What is being asked for here — click to change it")
-            Spacer()
+            Spacer(minLength: 4)
+            // Whose annotation this is, beside what kind it is — the two facts that
+            // identify the row, read together on one line.
+            //
+            // It was under the note, and that put it in the same row as the controls: five
+            // of them and a name do not fit 271 points, and the name won by wrapping to two
+            // lines and squeezing "Resolve" down to "Resol…". Up here it shares a line with
+            // a picker of fixed width and a badge that is usually absent, and the footer is
+            // free to be nothing but controls.
+            Text(annotation.author.isEmpty ? "Unsigned" : annotation.author)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                // Lowest priority in the row: a long name gives way to a badge, because
+                // "Declined" is a fact about the annotation and a name is a label on it.
+                .layoutPriority(-1)
+                .help(annotation.author.isEmpty ? "Nobody signed this"
+                                                : "Written by \(annotation.author)")
             if let verdict = annotation.verdict {
                 badge(verdict.title, colour: Color(hex: verdict.hex),
                       help: annotation.verdictBy.map { "\(verdict.title) by \($0)" })
@@ -398,32 +416,27 @@ struct AnnotationsPane: View {
         replyText = ""
     }
 
-    /// Who wrote it, and — when it is the chosen row — what can be done about it.
+    /// What can be done about it, when it is the chosen row.
+    ///
+    /// The controls really are inserted and removed, so the transition belongs to them. It
+    /// used to wrap a whole footer that also held the byline, through a modifier branching
+    /// on `selected` — and an `if`/`else` in a view builder gives the two branches different
+    /// identities, so SwiftUI treated every selection as the footer being REPLACED and slid
+    /// the author's name up and back down with it. Nothing about the name had changed. The
+    /// name now lives in the heading, which settles that argument by removing its subject.
+    @ViewBuilder
     private func footer(_ annotation: Annotation, selected: Bool) -> some View {
-        HStack(spacing: 6) {
-            Text(annotation.author.isEmpty ? "Unsigned" : annotation.author)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                // One line, truncated. A long name wrapping to two makes the row taller
-                // and the buttons beside it shorter, which is how "Resolve" came to be
-                // rendered as "Resol…" — the byline is the part that can afford to lose
-                // characters here.
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .layoutPriority(-1)
-            Spacer(minLength: 4)
-            // The transition belongs to the CONTROLS, which really are inserted and
-            // removed. It used to wrap the whole footer through a modifier that branched
-            // on `selected` — and an `if`/`else` in a view builder gives the two branches
-            // different identities, so SwiftUI treated every selection as the footer being
-            // REPLACED and slid the author's name up and back down with it. Nothing about
-            // the name changed; it had no business moving.
-            if selected { actions(annotation).transition(.opacity) }
+        if selected {
+            HStack(spacing: 6) {
+                Spacer()
+                actions(annotation)
+            }
+            .controlSize(.small)
+            // On top of the stack's own 8: at 8 the controls sat close enough under the
+            // note to read as another line of it.
+            .padding(.top, 6)
+            .transition(.opacity)
         }
-        .controlSize(.small)
-        // On top of the stack's own 8. The footer carries the byline and the actions, and
-        // at 8 they sat close enough under the note to read as another line of it.
-        .padding(.top, 6)
     }
 
     @ViewBuilder
@@ -456,10 +469,13 @@ struct AnnotationsPane: View {
         // governs: you may not rewrite what somebody asked for, and you may always say
         // something about it. So it sits with the verdicts, and wears a glyph as they do.
         //
-        // An icon rather than a word because the row cannot afford one: at 271 points of
-        // card, "Reply" and "Resolve" together left "Resolve" rendering as "Resol…". The
-        // three responses being glyphs and the two decisions about the WORK being words is
-        // a division worth having anyway.
+        // A glyph rather than a word. It began as a width fix — "Reply" and "Resolve"
+        // together on a row that also held the byline left the second rendering as
+        // "Resol…" — and the byline moving up to the heading has since given the row about
+        // a hundred points back, so the word would fit now. It stays a glyph on the
+        // argument that outlived the constraint: the three RESPONSES read as a group of
+        // marks, the two decisions about the WORK read as words, and "Reply" beside
+        // "Resolve" is two similar words doing different jobs.
         Button {
             replyText = ""
             withMotion(.reveal) { model.beginReply(to: annotation.id) }
