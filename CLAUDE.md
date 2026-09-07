@@ -38,6 +38,22 @@ Both have a bug behind them; do not relax either.
 
 ## Where things are
 
+- `Document/MarkdownRenderer.swift` — the only place Revis talks to Apex, and the only
+  place that knows `apex_options` exists. Three things in it are load-bearing. It uses the
+  **`ApexC`** product, not the `Apex` Swift wrapper: the wrapper's targets carry
+  `.unsafeFlags`, which SwiftPM refuses outright when a package is depended on by version,
+  and its `ApexOptions` exposes twelve of the ninety-odd flags — none of the ones a reviewer
+  wants. Calls are serialised behind a lock, because two threads in
+  `apex_markdown_to_html` at once abort inside libsystem_c (found by the parallel test run;
+  a sequential run never sees it). And `relaxed_tables` is forced OFF against the mode
+  presets, which enable it for Kramdown, Unified and Quarto — with it on, an ordinary pipe
+  table that has a header rule loses its header, `<th>` cells coming out as `<td>`.
+- `Document/MarkdownShadow.swift` and `MarkdownLocator.swift` — carrying a quote from the
+  page back to the file. The shadow is the piece here that can be *quietly* wrong, so the
+  test that matters is `shadowReproducesTheRenderedText`: its text and Apex's rendered text
+  must be the same string, checked against Apex itself. If you touch the scanner, run it —
+  and remember that a construct's handling has to be gated on the same option Apex was
+  given, or the shadow reads a `[^1]` the page rendered as literal text.
 - `Document/HTMLSanitizer.swift` — the tokenizer. The one place where being wrong is a
   security bug. It is a denylist over elements and an allowlist over attributes; keep it
   that way, and add a test to `Tests/SanitizerTests.swift` for anything you change.
@@ -47,6 +63,10 @@ Both have a bug behind them; do not relax either.
   indices, computes anchors, and draws. Text highlights use the Custom Highlight API rather
   than wrapping spans, because wrapping mutates the DOM and every stored offset is measured
   against it.
+- `Models/MarkdownOptions.swift` — what a Markdown document was read as. Stored in the
+  review, not just in the preferences: the same file read as CommonMark and as Kramdown is
+  two different documents, and the annotations were made against one of them. Hand-written
+  `init(from:)` for the reason below.
 - `Models/Annotation.swift` — the anchor model, and the reasoning for carrying four
   addresses for one place. Also `Annotation.init(from:)`, which is hand-written and must
   stay that way: Swift's synthesised decoder throws on a missing key even when the property
@@ -55,6 +75,20 @@ Both have a bug behind them; do not relax either.
 - `Document/ReplyImport.swift` — reading a reply document. Forgiving about how an id is
   written, rigid about which item it names, and it never accepts an item number: a wrong id
   matches nothing and is reported, a wrong number matches something.
+
+## Adding a field to anything that goes in a `.revis`
+
+The trap is written up in `Annotation.init(from:)` and it is worth reading before touching
+any of these types. Swift's synthesised decoder throws on a missing key even where the
+property has a default; `ReviewDocument` turns a decode failure into "this must be HTML";
+so a field added carelessly does not fail loudly — it makes every review already on disk
+reopen empty, as a review of its own JSON.
+
+`Annotation`, `Intent` and `MarkdownOptions` decode by hand and are safe. `PreparedDocument`
+and `SanitizationReport` still use the synthesised decoder, which is why `markdown` was
+added to `PreparedDocument` as an **Optional** — Optionals are the one kind the synthesised
+decoder tolerates missing. Anything non-optional added to either of those needs a
+hand-written `init(from:)` first.
 
 ## Debugging the page
 

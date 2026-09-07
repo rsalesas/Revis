@@ -68,6 +68,8 @@ enum InspectorTab: String, CaseIterable, Identifiable, Sendable {
     case outline
     /// What the document is, where it came from, and what the sanitizer took out of it.
     case document
+    /// How a Markdown document is being read. Shown only for one — see `available(for:)`.
+    case markdown
 
     var id: String { rawValue }
 
@@ -75,6 +77,7 @@ enum InspectorTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .outline:  return "Outline"
         case .document: return "Document"
+        case .markdown: return "Markdown"
         }
     }
 
@@ -82,6 +85,22 @@ enum InspectorTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .outline:  return "list.bullet.indent"
         case .document: return "doc.text"
+        case .markdown: return "text.alignleft"
         }
+    }
+
+    /// The tabs a document of this kind has.
+    ///
+    /// Markdown gets its own rather than a section inside Document, because it is not a
+    /// description of the document — it is the set of decisions that MADE it, and the only
+    /// controls in this panel that change what is on the page. Filed under "what this
+    /// document is", between the SHA-256 and the sanitizer's report, they read as more
+    /// provenance and are found by nobody.
+    ///
+    /// Absent entirely for an HTML document, rather than present and empty: there is no
+    /// answer to give, and a tab that explains why it has nothing in it is worse than a tab
+    /// that was never there.
+    static func available(forMarkdown: Bool) -> [InspectorTab] {
+        forMarkdown ? allCases : allCases.filter { $0 != .markdown }
     }
 }

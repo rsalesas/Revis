@@ -1,8 +1,8 @@
 # Revis
 
-A macOS reviewer for HTML documents that came out of a language model — a specification, a
+A macOS reviewer for documents that came out of a language model — a specification, a
 draft, a report — and a way to mark them up so that the same model can act on what you
-said.
+said. HTML or Markdown.
 
 It is the other half of [Vaelora](../Vaelora): Vaelora writes a document, Revis reviews
 one. There is no editor here. A document opens straight into review mode, rendered exactly
@@ -103,6 +103,46 @@ Ids, never item numbers. Numbers are assigned at export and differ in the next o
 to the point, a wrong id matches nothing and is reported, where a wrong number would match
 *something*, and an answer filed under the wrong question looks correct forever after.
 
+## Markdown
+
+A `.md` opens the same way a `.html` does. It is rendered by
+[Apex](https://github.com/ApexMarkdown/apex) — CommonMark, GFM, MultiMarkdown, Kramdown,
+Quarto, or everything at once — and the result goes through exactly the same sanitizer and
+the same CSP as any other document, because a Markdown file can contain raw HTML and being
+produced by a renderer is not a reason to trust it.
+
+Which dialect a file is in is a fact about the file, so it is a property of the *document*,
+stored in its review and changed in that window's own **Markdown** inspector tab — which
+appears only for a Markdown document. Settings holds the guess made before anyone has
+looked at it, and nothing else. Change the dialect and the document is read again;
+anything that no longer matches is listed rather than left to be noticed, and nothing is
+deleted.
+
+### The part that is actually hard
+
+You review the rendering. The assistant edits the source. Those are two documents, and an
+annotation quoting *"retained for ninety days"* is not an address in a file that says
+`retained for **ninety** days`.
+
+Apex cannot help with this — it has no source positions in its HTML, none in its C API and
+none in its JSON AST, and could not have useful ones anyway, since a dozen of its
+extensions rewrite the source text before cmark ever parses it. So Revis carries the quote
+back itself, and the way it does so falls straight out of what the app already is: **every
+annotation was always addressed by quoting it**, so the question is not "where is this node"
+but "where are these words", which is a search.
+
+`MarkdownShadow` reads the file into the text a reader sees — emphasis markers dropped,
+link targets dropped, `---` folded to the em dash it becomes, footnote definitions moved to
+where the renderer puts them — while every character keeps a note of the source it came
+from. `MarkdownLocator` then finds the annotation's words in that shadow, using the context
+and the heading trail the anchor already stores to pick between repeated passages. The
+export quotes **the source file's own spelling**, markup and all, so a reader can search
+for it literally, with the page's reading underneath.
+
+And where a quote is *not* in the file — a generated table of contents, a footnote's `↩`,
+the numbering — the item says exactly that instead of approximating it to the nearest
+thing. A wrong address that looks right is the one failure this app is not allowed to have.
+
 ## Safety
 
 The document is untrusted input. It is made inert in four independent layers, and none of
@@ -114,6 +154,12 @@ them is trusted to be the only one:
 | **Content Security Policy** | The page is served under `default-src 'none'` with `script-src 'none'`, no `connect-src`, `form-action 'none'`, `base-uri 'none'`. A script that survived the sanitizer still cannot run. |
 | **Isolated content world** | The review runtime is injected as a user script into its own `WKContentWorld`, which is exempt from the page's CSP — which is precisely what lets that CSP be absolute. Page script, if any existed, could not see or forge the bridge. |
 | **Process** | Navigation delegate cancels everything after the initial load; non-persistent data store; release builds ship **without** the network entitlement. |
+
+A Markdown document is refused four of Apex's abilities outright, and they are not
+settings: file includes, bibliographies and concordances all read files at paths the
+*document* chooses — the containment check that guards images does not exist inside Apex —
+and the plugin system downloads and loads external code, which is the one thing this app is
+built to make impossible.
 
 Images are resolved by the app, from inside the document's own folder, and embedded as data
 URLs before the page is shown — the document never gets to ask for a file, and a path that
@@ -139,7 +185,9 @@ real document destroyed it. See `SourceDetachment`.
 ## Trying it on something
 
 `Samples/data-retention-spec.html` is four pages, complete with the things the sanitizer
-should refuse. `Samples/large-review.revis` is the other end of the range: a review of a
+should refuse. `Samples/retention-spec.md` is the Markdown equivalent: metadata block,
+definition lists, footnotes, a table, task lists, and two sections that say the same
+sentence on purpose, so you can watch the export tell them apart. `Samples/large-review.revis` is the other end of the range: a review of a
 three-hundred-page specification — 2,013 blocks, 135,000 words — carrying 300 annotations
 of every kind, with verdicts, resolutions, drawn regions and reply threads spread all the
 way through. Open it to see what the app does at a size worth worrying about.
@@ -197,6 +245,7 @@ Revis/
   Models/       Annotation, intents, palette, per-window review model, settings
   Document/     Sanitizer, image resolution, page shell, export
   Views/        Review window, annotations pane, inspector, settings
+  Document/     …also the Markdown renderer, the source shadow and the locator
   Resources/    review.css, review.js — the document runtime
 Samples/        Documents to try it on, including a 300-page one and a review of it, complete with the things it should refuse
 Tests/

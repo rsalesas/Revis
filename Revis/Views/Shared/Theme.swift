@@ -18,6 +18,15 @@ enum Theme {
     static let documentBackground = Color(nsColor: .revisDocumentBackground)
     static let hairline = Color.primary.opacity(0.10)
 
+    /// Something the reviewer needs to know before they carry on — not an error, and not
+    /// decoration either. Used where re-reading a Markdown document has left marks that no
+    /// longer point at anything.
+    ///
+    /// A token rather than `.orange` at the call site, because in Dark the accent IS
+    /// orange: a warning typed as a colour would be indistinguishable from the app's own
+    /// emphasis exactly where it most needs to stand apart from it.
+    static let warning = Color(nsColor: .systemYellow).opacity(0.95)
+
     /// The height of a pane's header strip. One number, so the annotation pane's header
     /// and the inspector's land their hairlines on the same row — a two-point difference
     /// between two headers side by side is the kind of thing you cannot unsee.

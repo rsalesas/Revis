@@ -3,12 +3,23 @@ import SwiftUI
 /// The panel on the far side of the window: where you are in the document, and what the
 /// document is.
 ///
-/// Two tabs and no settings. Vaelora's inspector configures an export; there is nothing
-/// here to configure, because Revis renders what it was given. What it has instead is the
-/// thing a reviewer of a long generated spec actually needs — a way to get about it — and
-/// the provenance the app owes them for having rewritten the file before showing it.
+/// Two tabs. Vaelora's inspector configures an export; there is almost nothing here to
+/// configure, because Revis renders what it was given. What it has instead is the thing a
+/// reviewer of a long generated spec actually needs — a way to get about it — and the
+/// provenance the app owes them for having rewritten the file before showing it.
+///
+/// The one exception is Markdown, and it is an exception for a reason rather than by
+/// concession. A `.html` document IS the page; a `.md` document is not, and something has
+/// to decide which dialect it is in before it can be shown at all. That decision belongs
+/// to the document — a file is written for one processor and the reader does not get a
+/// vote — so it lives here, beside the rest of what this document is, and is stored in the
+/// review with it.
 struct InspectorView: View {
     @ObservedObject var model: ReviewModel
+
+    /// Annotations whose words vanished when the document was last read again. Cleared by
+    /// the next change, because it describes one change and not a running total.
+    @State private var disturbed: [Annotation] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,6 +28,7 @@ struct InspectorView: View {
             switch model.inspectorTab {
             case .outline:  outline
             case .document: document
+            case .markdown: markdown
             }
         }
         .background(Theme.inspectorBackground)
@@ -24,7 +36,7 @@ struct InspectorView: View {
 
     private var header: some View {
         Picker("", selection: $model.inspectorTab) {
-            ForEach(InspectorTab.allCases) { tab in
+            ForEach(InspectorTab.available(forMarkdown: model.markdownOptions != nil)) { tab in
                 Label(tab.title, systemImage: tab.symbol).tag(tab)
             }
         }
@@ -169,6 +181,43 @@ struct InspectorView: View {
                 }
             }
             .padding(16)
+        }
+    }
+
+    // MARK: - Markdown
+
+    /// How this document is being read — and, when reading it again has left marks that no
+    /// longer point at anything, which ones.
+    @ViewBuilder private var markdown: some View {
+        if let options = model.markdownOptions {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    group("Read as Markdown") {
+                        // Written straight through the model rather than held in a local
+                        // copy: the settings belong to the document and are stored in its
+                        // review, so a second copy here would be a second answer to the
+                        // question of what this document is.
+                        MarkdownOptionsEditor(options: Binding(
+                            get: { options },
+                            set: { disturbed = model.reread(with: $0) }))
+                    }
+
+                    if !disturbed.isEmpty {
+                        MarkdownRereadWarning(disturbed: disturbed)
+                    }
+
+                    group("Safety") {
+                        Text("A Markdown document cannot pull in other files or run"
+                             + " anything, whatever it asks for, and what it renders to is"
+                             + " scrubbed by the same sanitizer as any other document"
+                             + " before it is shown.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(16)
+            }
         }
     }
 
