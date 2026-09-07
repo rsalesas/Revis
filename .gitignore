@@ -23,5 +23,12 @@ Revis/Info.plist
 # macOS
 .DS_Store
 
+# Agent worktrees
+#
+# These live INSIDE the working tree, and each one is a full copy of the repository — so
+# without this rule a `git add -A` from the project root commits the repo into itself.
+# Narrow on purpose: `.claude/` itself stays available for anything worth tracking.
+.claude/worktrees/
+
 # Secrets
 *.env
