@@ -48,7 +48,13 @@ Both have a bug behind them; do not relax either.
   than wrapping spans, because wrapping mutates the DOM and every stored offset is measured
   against it.
 - `Models/Annotation.swift` — the anchor model, and the reasoning for carrying four
-  addresses for one place.
+  addresses for one place. Also `Annotation.init(from:)`, which is hand-written and must
+  stay that way: Swift's synthesised decoder throws on a missing key even when the property
+  has a default, and `ReviewDocument` turns a decode failure into "this is HTML" — so a
+  field added without it does not fail loudly, it makes every saved review reopen empty.
+- `Document/ReplyImport.swift` — reading a reply document. Forgiving about how an id is
+  written, rigid about which item it names, and it never accepts an item number: a wrong id
+  matches nothing and is reported, a wrong number matches something.
 
 ## Debugging the page
 

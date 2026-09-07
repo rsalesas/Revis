@@ -138,7 +138,33 @@ struct ExportRealismTests {
                                        path: "4. Deletion mechanics › paragraph 1",
                                        in: text))
         refused.decide(.declined, by: "Robert Salesas")
+        // A thread on the DECLINED item, which is where the remark saying why is worth
+        // most — and which the Declined section would drop if only `item` carried threads.
+        refused.replies = [
+            Reply(author: "Priya Raman",
+                  text: "Declined because the worker's cost is dominated by the scan, not"
+                      + " the delete: quarter-hourly would be four times the bill for the"
+                      + " same outcome."),
+        ]
         annotations.append(refused)
+
+        // 9. A reply that CONTRADICTS its own instruction, nobody having folded it back in.
+        //    The export says to follow the instruction and report the disagreement, which
+        //    is the one rule about threads a reader has to get right.
+        var argued = note(.change, "Change the aggregate retention to five years.",
+                          Self.anchor("Aggregates computed from personal data are retained"
+                                      + " indefinitely", block: 17,
+                                      path: "3. Retention periods › 3.2 Derived and"
+                                          + " aggregate data › paragraph 1", in: text))
+        argued.replies = [
+            Reply(author: "Priya Raman",
+                  text: "Five is too long — legal said two years at the review last week."),
+            Reply(author: "Claude",
+                  text: "For what it is worth, §3.3 says Indefinite for Aggregates, so"
+                      + " whichever number wins, that row needs the same edit.",
+                  isAssistant: true),
+        ]
+        annotations.append(argued)
 
         // 8. A point rather than a span: something has to be added after this paragraph.
         annotations.append(note(

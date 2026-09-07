@@ -66,6 +66,43 @@ it over as work would have an assistant make a change that had been explicitly t
 An approved one is marked as agreed, which is the difference between one person's opinion
 and a decision.
 
+Short of a verdict there are **replies**: a thread under one annotation. Anyone may reply
+to anyone, on a decided annotation as much as an open one — a verdict settles what is being
+*asked*, not whether anybody may remark on it, and "declined because the scan dominates the
+cost" belongs exactly there. What you may not do is rewrite somebody else's instruction,
+which is what replying is for.
+
+A thread is exported as a record of a discussion and never as an instruction. Where a reply
+asks for something the instruction above it does not, the reader is told to **do what the
+instruction says and report that the two disagree** — the same rule the export already
+applies to a fact corrected in one place and left wrong in another. Every reply goes out
+quoted and attributed, which is also what stops one that begins `### 8. Change —` from
+forging an item in the next review.
+
+### Answering back
+
+The export tells a model that a question wants an answer rather than an edit, and that
+words it drafted itself should be declared. Both of those need somewhere to go, so a review
+comes back as well as out. A **reply document** is Markdown, one heading per item, the
+heading being the item's id:
+
+```markdown
+## a6c4e2f0-9d31-4b7e-8f52-1c0d7e5a3b91
+
+**Answered by** Claude
+
+The fifty-individual threshold is not defined anywhere in this document. §2 defines
+"Collection event" and "Deletion" and nothing else. I have not changed the text.
+```
+
+*File ▸ Import Replies…* takes that — pasted straight out of a chat window, or from a file
+— and files each reply under the item it names. It shows you what it is about to attach,
+against the annotation it matched, before attaching anything.
+
+Ids, never item numbers. Numbers are assigned at export and differ in the next one; more
+to the point, a wrong id matches nothing and is reported, where a wrong number would match
+*something*, and an answer filed under the wrong question looks correct forever after.
+
 ## Safety
 
 The document is untrusted input. It is made inert in four independent layers, and none of
@@ -149,10 +186,14 @@ sanitizing, text and region annotations with intents, the annotations pane, the 
 provenance inspector, zoom, the stylesheet switch, saving a `.revis`, and the
 Markdown/JSON export.
 
-Not verified yet: whether a model actually applies the export correctly. The export is
-prose keyed on quoted text, with block indices marked explicitly as tie-breakers — the open
-question is whether that is enough to locate every item without alignment, or whether the
-anchors need to be carried in the document itself. That is the next test.
+Verified against real models, twice. Given only the document and the export — no other
+context — two model instances applied a deliberately awkward review: a phrase occurring
+twice where only the second was meant, a box over a table narrowed by its instruction, a
+question to answer rather than act on, and a request a reviewer had declined. Both located
+every item from the quoted text alone, neither needed a character offset, and the two
+edited documents came out byte-identical everywhere the review specified an outcome. Both
+also caught, unprompted, that changing the retention period leaves a clause elsewhere
+saying nothing — and reported it rather than fixing it, which is what the export asks for.
 
-Not done yet: freehand drawing and highlighting on the page, replies to an annotation,
-comparing two versions of a document, and the app icon.
+Not done yet: freehand drawing and highlighting on the page, comparing two versions of a
+document, and the app icon.
