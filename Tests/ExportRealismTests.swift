@@ -11,61 +11,8 @@ import Foundation
 /// span, and an approval that must survive untouched.
 struct ExportRealismTests {
 
-    private static func fixture(_ name: String) -> String {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().appendingPathComponent("Fixtures")
-            .appendingPathComponent(name)
-        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-    }
-
-    /// The document's visible text, whitespace collapsed — what the runtime measures
-    /// offsets and context against.
-    private static func plainText(_ html: String) -> String {
-        var out = ""
-        var inTag = false
-        for character in HTMLSanitizer.sanitize(html).body {
-            if character == "<" { inTag = true; out.append(" ") }
-            else if character == ">" { inTag = false }
-            else if !inTag { out.append(character) }
-        }
-        return out.replacingOccurrences(of: "\\s+", with: " ",
-                                        options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
-    }
-
-    /// An anchor built the way the runtime builds one: the exact quote, plus up to 64
-    /// characters either side, trimmed only on the outer edge.
-    private static func anchor(_ quote: String, occurrence: Int = 0, block: Int,
-                               path: String, role: String = "paragraph",
-                               in text: String) -> Anchor {
-        var searchFrom = text.startIndex
-        var found: Range<String.Index>?
-        for _ in 0...occurrence {
-            guard let hit = text.range(of: quote, range: searchFrom..<text.endIndex) else {
-                break
-            }
-            found = hit
-            searchFrom = hit.upperBound
-        }
-        guard let range = found else {
-            Issue.record("the fixture does not contain \"\(quote)\"")
-            return Anchor(blocks: [block], path: path, role: role, quote: quote,
-                          prefix: "", suffix: "", start: -1, end: -1, rect: nil)
-        }
-        let head = text.index(range.lowerBound, offsetBy: -64,
-                              limitedBy: text.startIndex) ?? text.startIndex
-        let tail = text.index(range.upperBound, offsetBy: 64,
-                              limitedBy: text.endIndex) ?? text.endIndex
-        return Anchor(
-            blocks: [block], path: path, role: role, quote: quote,
-            prefix: String(text[head..<range.lowerBound]).replacingOccurrences(
-                of: "^\\s+", with: "", options: .regularExpression),
-            suffix: String(text[range.upperBound..<tail]).replacingOccurrences(
-                of: "\\s+$", with: "", options: .regularExpression),
-            start: text.distance(from: text.startIndex, to: range.lowerBound),
-            end: text.distance(from: text.startIndex, to: range.upperBound),
-            rect: nil)
-    }
+    // The document, its text and its anchors all come from `ReviewFixtures`, so this file
+    // and `FileFormatTests` cut their quotes out of the same document by the same rules.
 
     @Test func writeARealisticReviewForTestingAgainstAModel() throws {
         let file = try Self.realisticFile()
@@ -89,8 +36,8 @@ struct ExportRealismTests {
     }
 
     static func realisticFile() throws -> ReviewFile {
-        let html = Self.fixture("data-retention-spec.html")
-        let text = Self.plainText(html)
+        let html = ReviewFixtures.html()
+        let text = ReviewFixtures.plainText(html)
         let prepared = DocumentPrep.prepare(html: html, baseURL: nil)
 
         // LITERAL ids, not fresh ones, and this is what makes the round trip testable at
@@ -118,7 +65,7 @@ struct ExportRealismTests {
         var annotations: [Annotation] = [
             // 1. The straightforward case: one occurrence, plain prose.
             note(.change, "Make this thirty (30) days.",
-                 Self.anchor("ninety (90) days", block: 11,
+                 ReviewFixtures.anchor("ninety (90) days", block: 11,
                              path: "3. Retention periods › 3.1 Personal data › paragraph 1",
                              in: text)),
 
@@ -128,21 +75,21 @@ struct ExportRealismTests {
             //    enough or whether anchors have to be carried in the document.
             note(.change, "Support transcripts are evidenced by the ticket record, not the"
                  + " worker log. Change this one only.",
-                 Self.anchor("Worker log", occurrence: 1, block: 19,
+                 ReviewFixtures.anchor("Worker log", occurrence: 1, block: 19,
                              path: "3. Retention periods › 3.3 Summary › table",
                              role: "table", in: text)),
 
             // 3. A whole block, removed.
             note(.remove, "This is covered by the corporate schedule already — take the"
                  + " whole callout out.",
-                 Self.anchor("Anything not named in §3 is out of scope and continues to"
+                 ReviewFixtures.anchor("Anything not named in §3 is out of scope and continues to"
                              + " follow the general corporate retention schedule.",
                              block: 5, path: "1. Scope › paragraph 2", in: text)),
 
             // 4. A question, which asks for no edit at all.
             note(.question, "Where is the fifty-individual threshold defined? It is not in"
                  + " §2.",
-                 Self.anchor("Aggregates over cohorts smaller than fifty individuals are"
+                 ReviewFixtures.anchor("Aggregates over cohorts smaller than fifty individuals are"
                              + " treated as personal data.", block: 17,
                              path: "3. Retention periods › 3.2 Derived and aggregate data"
                                  + " › paragraph 2", in: text)),
@@ -150,7 +97,7 @@ struct ExportRealismTests {
             // 5. A comment: something worth knowing, asking for no edit.
             note(.comment, "This definition is the one everything else leans on — worth"
                  + " keeping exactly as it is.",
-                 Self.anchor("Irreversible removal from primary storage, all replicas, and"
+                 ReviewFixtures.anchor("Irreversible removal from primary storage, all replicas, and"
                              + " all backups taken after the deletion request.", block: 9,
                              path: "2. Definitions › definition 2", role: "definition",
                              in: text)),
@@ -172,7 +119,7 @@ struct ExportRealismTests {
         //    reader not to act on it — a declined suggestion handed over as work is a
         //    change somebody explicitly refused.
         var refused = note(.change, "Make the retention worker run every fifteen minutes.",
-                           Self.anchor("The retention worker runs hourly.", block: 21,
+                           ReviewFixtures.anchor("The retention worker runs hourly.", block: 21,
                                        path: "4. Deletion mechanics › paragraph 1",
                                        in: text))
         refused.decide(.declined, by: "Robert Salesas")
@@ -190,7 +137,7 @@ struct ExportRealismTests {
         //    The export says to follow the instruction and report the disagreement, which
         //    is the one rule about threads a reader has to get right.
         var argued = note(.change, "Change the aggregate retention to five years.",
-                          Self.anchor("Aggregates computed from personal data are retained"
+                          ReviewFixtures.anchor("Aggregates computed from personal data are retained"
                                       + " indefinitely", block: 17,
                                       path: "3. Retention periods › 3.2 Derived and"
                                           + " aggregate data › paragraph 1", in: text))
@@ -208,7 +155,7 @@ struct ExportRealismTests {
         annotations.append(note(
             .insert, "Add a sentence here saying what happens when a replica is offline at"
                 + " the moment the delete is issued.",
-            Self.anchor("Backups are not rewritten; instead the tombstone is replayed when"
+            ReviewFixtures.anchor("Backups are not rewritten; instead the tombstone is replayed when"
                         + " a backup is restored.", block: 21,
                         path: "4. Deletion mechanics › paragraph 1", in: text)))
 
@@ -236,15 +183,8 @@ struct ExportRealismTests {
 /// annotations by hand, and it is reproducible, which a hand-made one is not.
 struct IntentSpecimenTests {
 
-    private static func fixture(_ name: String) -> String {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().appendingPathComponent("Fixtures")
-            .appendingPathComponent(name)
-        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-    }
-
     @Test func writeOneCardOfEveryIntent() throws {
-        let html = Self.fixture("data-retention-spec.html")
+        let html = ReviewFixtures.html()
         let prepared = DocumentPrep.prepare(html: html, baseURL: nil)
 
         // Blocks 3 upward: the paragraphs of the document, one per intent, so the rows sit
@@ -297,7 +237,7 @@ struct ModelReplyFixtureTests {
     }
 
     @Test func aRealModelsReplyDocumentReadsCleanly() throws {
-        let reading = ReplyImport.read(Self.fixture("model-reply.md"))
+        let reading = ReplyImport.read(ReviewFixtures.html("model-reply.md"))
         #expect(reading.problems.isEmpty, "problems: \(reading.problems)")
         #expect(reading.replies.count == 5)
         // It named itself, so the importer does not have to guess.
@@ -313,7 +253,7 @@ struct ModelReplyFixtureTests {
     @Test func everyReplyInItLandsOnAnItemOfThisReview() throws {
         let annotations = try ExportRealismTests.realisticAnnotations()
         var working = annotations
-        let landings = ReplyImport.plan(ReplyImport.read(Self.fixture("model-reply.md")),
+        let landings = ReplyImport.plan(ReplyImport.read(ReviewFixtures.html("model-reply.md")),
                                         against: working)
         let result = ReplyImport.attach(landings, to: &working, signedBy: "Assistant")
         #expect(result.unmatched.isEmpty,

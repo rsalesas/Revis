@@ -7,43 +7,48 @@ import Foundation
 /// whatever the encoder happened to emit is a format nobody can rely on.
 struct FileFormatTests {
 
+    /// A review of the REAL sample document, anchored at blocks it actually has.
+    ///
+    /// It used to carry a one-line stub for a body and anchors naming blocks 3 and 8–11,
+    /// which that stub did not contain. Nothing failed: a mark whose block is absent is one
+    /// the runtime declines to draw, which is right. But `specimen()` exists so a person can
+    /// LOOK at a review, and opening this one showed an empty margin beside a full pane —
+    /// which reads as the app being broken rather than as the fixture being a sketch. A
+    /// specimen has to be a specimen of the whole thing.
     private func sample() -> ReviewFile {
-        let text = Anchor(
-            blocks: [3], path: "1. Scope › paragraph 1", role: "paragraph",
-            quote: "each class of record",
-            prefix: "This document specifies how long the Customer Data Platform retains",
-            suffix: ", what triggers deletion, and how deletion is evidenced.",
-            start: 88, end: 108, rect: nil)
+        let html = ReviewFixtures.html()
+        let text = ReviewFixtures.plainText(html)
+        // Block indices match the runtime's `data-rv` stamping of this document, the same
+        // ones `ExportRealismTests` uses.
+        let span = ReviewFixtures.anchor(
+            "each class of record", block: 3, path: "1. Scope › paragraph 1", in: text)
+        let definition = ReviewFixtures.anchor(
+            "Irreversible removal from primary storage, all replicas, and all backups taken"
+                + " after the deletion request.",
+            block: 9, path: "2. Definitions › definition 2", role: "definition", in: text)
+        // A drawn box, so the specimen shows the one anchor kind that has no character
+        // range — the case a reader of the format is most likely to get wrong.
         let region = Anchor(
-            blocks: [8, 9, 10, 11], path: "2. Definitions › term 1", role: "region",
-            quote: "Collection event ⏎ The moment a record first enters the platform,"
-                + " whether by API, batch import, or manual entry. ⏎ Deletion ⏎"
-                + " Irreversible removal from primary storage, all replicas, and all"
-                + " backups taken after the deletion request.",
+            blocks: [19], path: "3. Retention periods › 3.3 Summary › table", role: "region",
+            quote: "Class Retention Trigger Evidence Personal data 90 days Collection event"
+                + " Worker log Audit records 7 years Write Immutable store Aggregates"
+                + " Indefinite — None Support transcripts 180 days Ticket close Worker log",
             prefix: "", suffix: "", start: -1, end: -1,
             rect: NormalizedRect(x: -0.02, y: -0.31, width: 1.79, height: 1.23))
         return ReviewFile(
             source: SourceInfo(name: "data-retention-spec.html",
                                path: "/Users/robert/Documents/data-retention-spec.html",
                                capturedAt: Date(timeIntervalSince1970: 1_788_690_000),
-                               digest: "39b5352d9712d516c52c4b2b05fdd49672a6dcf1b0c991"
-                                     + "c323fe79764d168490"),
-            document: PreparedDocument(
-                body: "<h1>Customer Data Platform — Retention Specification</h1>…",
-                css: "body { font-family: Georgia, serif; color: #23252b; }…",
-                title: "Customer Data Platform — Retention Specification",
-                report: SanitizationReport(scripts: 1, eventHandlers: 1, frames: 0,
-                                           interactive: 0, remoteResources: 2,
-                                           dangerousURLs: 1),
-                missingImages: ["figures/retention-worker.png"]),
+                               digest: SourceInfo.digest(of: Data(html.utf8))),
+            document: DocumentPrep.prepare(html: html, baseURL: nil),
             annotations: [
                 Annotation(author: "Robert Salesas", intent: .change,
                            note: "Say \"category\" rather than \"class\" — class means"
                                + " something else in the data model.",
-                           anchor: text),
+                           anchor: span),
                 Annotation(author: "Robert Salesas", intent: .question,
                            note: "Does \"all backups\" include the offsite weeklies?",
-                           anchor: region,
+                           anchor: definition,
                            replies: [
                                Reply(author: "Claude",
                                      text: "No — §2 says \"all backups taken after the"
@@ -53,6 +58,9 @@ struct FileFormatTests {
                                Reply(author: "Robert Salesas",
                                      text: "Then the definition needs to say so."),
                            ]),
+                Annotation(author: "Priya Raman", intent: .change,
+                           note: "The retention column has to match §3.1.",
+                           anchor: region),
             ])
     }
 
@@ -64,7 +72,7 @@ struct FileFormatTests {
         // Every anchor still says what it is about, which is the only part of a review
         // that a regenerated document cannot invalidate.
         #expect(restored.annotations[1].anchor.quote.contains("Irreversible removal"))
-        #expect(restored.annotations[1].anchor.isRegion)
+        #expect(restored.annotations[2].anchor.isRegion)
         // A thread survives in order and keeps who said what, including which remark came
         // from a machine.
         #expect(restored.annotations[1].replies.map(\.isAssistant) == [true, false])
