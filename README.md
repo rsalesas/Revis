@@ -162,6 +162,33 @@ Xcode project is generated from `project.yml` and is not in the repository.
 xcodebuild -project Revis.xcodeproj -scheme Revis test
 ```
 
+### The app icon
+
+`scripts/icon.svg` is the icon. The PNGs under `Revis/Assets.xcassets/AppIcon.appiconset`
+are rendered from it, never edited:
+
+```bash
+./scripts/make-icon.sh            # re-render all ten from the SVG
+./scripts/make-icon.sh --check    # render to a temp dir and diff, changing nothing
+```
+
+If a build comes up wearing the generic blank-application icon, the bundle is almost
+certainly fine and macOS is not. This app icon set was empty for its first few dozen
+builds, and LaunchServices caches *per bundle path* — so any copy launched during that
+time has "no icon" recorded against it, and rebuilding does not dislodge it, because
+nothing about the bundle is what it is consulting:
+
+```bash
+LS=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support
+"$LS/lsregister" -f /path/to/Revis.app && killall Dock
+```
+
+Check the bundle before believing the cache, because the two failures look identical from
+the outside and only one of them is yours: `iconutil -c iconset Contents/Resources/AppIcon.icns`
+unpacks what the Dock and the About panel actually read, and `assetutil --info
+Contents/Resources/Assets.car` lists what the catalog holds. If the artwork is in both,
+stop editing the icon.
+
 ## Layout
 
 ```
