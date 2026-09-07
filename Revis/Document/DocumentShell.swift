@@ -54,8 +54,14 @@ enum DocumentShell {
     ///   cosmetic preference: a generated document can arrive in aseven-point condensed face
     ///   on a tinted ground, and being unable to read it is being unable to review it. It
     ///   is off by default nowhere, because what was sent is what is under review.
+    /// - Parameter fitting: whether the document opens at Fit Width. Written into the
+    ///   body's class here rather than left to the runtime to add, because the runtime runs
+    ///   after the first paint: the page laid itself out at the sheet's nominal measure,
+    ///   painted, and then jumped to the fitted size a frame later. Once on opening a
+    ///   document is a flicker; on every change of a Markdown setting, which rebuilds the
+    ///   page, it is a shrink-flash-resize on each click of a switch.
     static func page(for prepared: PreparedDocument, chromeCSS: String,
-                     useDocumentCSS: Bool = true) -> String {
+                     useDocumentCSS: Bool = true, fitting: Bool = true) -> String {
         """
         <!DOCTYPE html>
         <html>
@@ -71,7 +77,7 @@ enum DocumentShell {
         \(useDocumentCSS ? prepared.css : "")
         </style>
         </head>
-        <body class="\(bodyClass(for: prepared, useDocumentCSS: useDocumentCSS))">
+        <body class="\(bodyClass(for: prepared, useDocumentCSS: useDocumentCSS, fitting: fitting))">
         <div id="rv-page">
           <div id="rv-sheet">
             <div id="rv-doc">
@@ -93,9 +99,11 @@ enum DocumentShell {
     /// and wants a different answer: there is nothing to set aside and nothing to defer to,
     /// so this app is laying the document out and should lay it out like a document.
     private static func bodyClass(for prepared: PreparedDocument,
-                                  useDocumentCSS: Bool) -> String {
-        if !useDocumentCSS { return "rv-reading" }
-        return prepared.hasStyle ? "" : "rv-plain"
+                                  useDocumentCSS: Bool, fitting: Bool) -> String {
+        var classes: [String] = fitting ? ["rv-fitting"] : []
+        if !useDocumentCSS { classes.append("rv-reading") }
+        else if !prepared.hasStyle { classes.append("rv-plain") }
+        return classes.joined(separator: " ")
     }
 
     private static func escaped(_ text: String) -> String {

@@ -211,10 +211,21 @@ struct RuntimeTests {
         #expect(try await page.string("document.getElementById('rv-page').style.width") == "",
                 "a fitting sheet fills by layout and must carry no width of its own")
 
+        // Asserted in SCREEN points, which is what `rvHold` is given and what the pane
+        // actually takes. The sheet's own width is in the page's coordinate space, and
+        // while fitting that space is divided by the zoom — so the two numbers are only
+        // the same at 100%. Pinning the raw width instead pinned the arithmetic rather
+        // than the meaning, and said nothing at all about a fitted sheet on a wide window,
+        // which is every fitted sheet.
         try await page.eval("window.rvHold(200);")
-        let held = try await page.string("document.getElementById('rv-page').style.width")
-        #expect(held == "\(filled - 200)px",
-                "held at \(held), expected \(filled - 200)px")
+        let givenUp = try await page.int("""
+            (function () {
+              var page = document.getElementById('rv-page');
+              var z = parseFloat(getComputedStyle(page).zoom) || 1;
+              return Math.round((\(filled) - parseFloat(page.style.width)) * z);
+            })()
+            """)
+        #expect(abs(givenUp - 200) <= 1, "gave up \(givenUp) points, expected 200")
 
         // Past the release, which the runtime schedules for itself off the pane's duration.
         try await page.settle(Motion.panel.duration + 0.4)

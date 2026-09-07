@@ -475,14 +475,15 @@
        window is resized far more often than the zoom is set, and a page that fitted when
        it opened and not afterwards is a page that stops fitting exactly when you notice. */
     fitting = !(typeof value === "number" && value > 0);
-    /* Fitting does not use the zoom at all. The sheet fills its container by layout (see
-       `body.rv-fitting` in review.css), which is the only way for it to change size in the
-       same pass as the container — anything script has to set arrives a process and a
-       resize event later, and for those frames the sheet is the wrong size and gets
-       clipped. So: zoom 1, and let the page be a page.
-       The number REPORTED is still the effective scale — how big the sheet is against its
-       nominal measure — so the readout means something and stepping out of Fit with + or −
-       carries on from where the eye is rather than jumping. */
+    /* Fitting does not use a SCRIPTED zoom, and that is still the rule: anything script
+       sets arrives a process and a resize event later, and for those frames the sheet is
+       the wrong size and gets clipped. What changed is that it does not have to be script.
+       `body.rv-fitting #rv-page` in review.css carries a `zoom` computed by calc from the
+       viewport, so it is resolved in layout, in the same pass as the container — and the
+       sheet's width is still `auto`, so it still gets its SIZE from layout exactly as
+       before. Both halves land together and there is nothing to wait for.
+       So: no inline zoom while fitting, or it would override the stylesheet with a number
+       arriving late — precisely the fault the stylesheet is there to avoid. */
     var z = fitting ? 1 : Math.max(0.35, Math.min(3, value));
     /* An explicit zoom is a step, not a chase: pressing + should change the size rather
        than animate toward it. Only a fit follows something and wants easing. */
@@ -490,8 +491,12 @@
     if (fitting) root.removeAttribute("data-rv-zooming");
     else root.setAttribute("data-rv-zooming", "");
     document.body.classList.toggle("rv-fitting", fitting);
-    page.style.zoom = z;
-    zoom = z;
+    page.style.zoom = fitting ? "" : z;
+    /* The EFFECTIVE scale, not the inline one. Marks divide their sizes by this so they
+       stay the same size on screen, and `pointFor` divides a click by it to reach the
+       page's own coordinates; while fitting, both were reading 1 for a page drawn at
+       two and a half times. */
+    zoom = fitting ? fitZoom() : z;
     /* After the reflow, not during it: every mark's position is measured, and measuring
        mid-layout reads the geometry the page is leaving rather than the one it is
        arriving at. */
@@ -602,7 +607,12 @@
     page.style.width = from + "px";
     void page.offsetWidth;              // the transition needs a start it has already had
     page.style.transition = "width " + ms + "ms " + motionCurve();
-    page.style.width = Math.max(200, from - points) + "px";
+    /* `points` is a pane's width on SCREEN; `width` is set in the page's own coordinate
+       space, which the zoom divides. Giving up the screen number unconverted made the
+       sheet surrender the pane's width times the zoom — at Fit on a wide window, more than
+       twice too much. */
+    var scale = zoom > 0 ? zoom : 1;
+    page.style.width = Math.max(200, from - points / scale) + "px";
 
     holding = setTimeout(function () {
       holding = 0;

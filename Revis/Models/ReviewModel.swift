@@ -254,7 +254,8 @@ final class ReviewModel: ObservableObject {
             for: prepared, chromeCSS: DocumentShell.bundleString(named: "review", ext: "css"),
             // No stylesheet of its own means the plain defaults, NEVER the reading style.
             // See `hasDocumentStyle`.
-            useDocumentCSS: hasDocumentStyle ? useDocumentStyle : true)
+            useDocumentCSS: hasDocumentStyle ? useDocumentStyle : true,
+            fitting: toFit)
     }
 
     // MARK: - Zoom
