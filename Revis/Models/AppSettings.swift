@@ -43,6 +43,20 @@ final class AppSettings: ObservableObject {
     /// Whether the export writes the JSON sidecar beside the Markdown.
     @Published var exportSidecar: Bool { didSet { save(.exportSidecar, exportSidecar) } }
 
+    /// What a Markdown document is read as when it is opened.
+    ///
+    /// A default and only a default: the settings that matter belong to the document, are
+    /// stored in its review, and are changed in the inspector. This is the guess made
+    /// before anybody has looked at the file — which is worth getting right, because most
+    /// documents are never going to need it changed, and worth being only a guess, because
+    /// the one that does is not wrong about its own dialect.
+    @Published var markdownDefaults: MarkdownOptions {
+        didSet {
+            guard let data = try? JSONEncoder().encode(markdownDefaults) else { return }
+            defaults.set(data, forKey: Key.markdownDefaults.rawValue)
+        }
+    }
+
     /// Who imported replies are signed as when the document did not say. Remembered
     /// because it is the same assistant most of the time and retyping it every import is a
     /// question already answered.
@@ -66,6 +80,7 @@ final class AppSettings: ObservableObject {
 
     private enum Key: String {
         case reviewerName, defaultIntent, defaultTool, exportSidecar, lastReplyAuthor
+        case markdownDefaults
         case useDocumentStyle, defaultZoom
         case annotationsVisible, inspectorVisible
     }
@@ -81,6 +96,9 @@ final class AppSettings: ObservableObject {
         exportSidecar = defaults.object(forKey: Key.exportSidecar.rawValue) as? Bool ?? true
         lastReplyAuthor = defaults.string(forKey: Key.lastReplyAuthor.rawValue) ?? "Assistant"
         useDocumentStyle = defaults.object(forKey: Key.useDocumentStyle.rawValue) as? Bool ?? true
+        markdownDefaults = (defaults.data(forKey: Key.markdownDefaults.rawValue)
+            .flatMap { try? JSONDecoder().decode(MarkdownOptions.self, from: $0) })
+            ?? .default
         defaultZoom = defaults.object(forKey: Key.defaultZoom.rawValue) as? Double ?? 0
     }
 

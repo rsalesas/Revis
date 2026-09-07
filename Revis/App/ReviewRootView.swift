@@ -62,9 +62,16 @@ struct ReviewRootView: View {
     /// place both are in hand. Clearing `pendingHTML` afterwards is what stops it running
     /// twice.
     private func prepareIfNeeded() {
-        guard let html = document.pendingHTML else { return }
-        model.adopt(html: html, from: fileURL)
-        document.pendingHTML = nil
+        if let markdown = document.pendingMarkdown {
+            model.adopt(markdown: markdown, from: fileURL,
+                        options: appSettings.markdownDefaults)
+            document.pendingMarkdown = nil
+        } else if let html = document.pendingHTML {
+            model.adopt(html: html, from: fileURL)
+            document.pendingHTML = nil
+        } else {
+            return
+        }
         // The folder was needed to resolve the document's images; the URL is not wanted
         // for anything after that, and keeping it is what would let a save reach the
         // source file.

@@ -166,12 +166,61 @@ final class ReviewModel: ObservableObject {
     /// images needs the folder it came from and a `FileDocument` is handed bytes with no
     /// URL attached. See `ReviewDocument.pendingHTML`.
     func adopt(html: String, from url: URL?) {
-        prepared = DocumentPrep.prepare(html: html, baseURL: url?.deletingLastPathComponent())
+        adopt(DocumentPrep.prepare(html: html, baseURL: url?.deletingLastPathComponent()),
+              from: url)
+    }
+
+    /// Import a Markdown document, rendering it under `options`.
+    func adopt(markdown: String, from url: URL?, options: MarkdownOptions) {
+        adopt(DocumentPrep.prepare(markdown: markdown,
+                                   baseURL: url?.deletingLastPathComponent(),
+                                   options: options),
+              from: url)
+    }
+
+    private func adopt(_ document: PreparedDocument, from url: URL?) {
+        prepared = document
         if let title = prepared.title, source.name == "Untitled" || source.name.isEmpty {
             source.name = title
         }
         source.path = url?.path
         rebuildPage()
+    }
+
+    // MARK: - Re-reading a Markdown document
+
+    /// The settings this document was rendered under, if it is a Markdown one.
+    var markdownOptions: MarkdownOptions? { prepared.markdown?.options }
+
+    /// Whether re-reading would move the marks already on the page.
+    ///
+    /// Re-rendering under different settings makes a different document: a table that was
+    /// a row of pipes becomes a table, blocks renumber, and every anchor is an address into
+    /// the page that no longer exists. `reread` re-seats what it can by searching for each
+    /// quote again; this is what the interface has to warn about first.
+    var rereadWouldDisturb: Bool { !annotations.isEmpty }
+
+    /// Render the document again under `options`, and put the marks back where the words
+    /// went.
+    ///
+    /// Returns the annotations whose quoted words are no longer anywhere in the document —
+    /// not silently, because a mark that quietly stopped pointing at anything is the one
+    /// failure a review must never have. The caller shows them; nothing is deleted.
+    @discardableResult
+    func reread(with options: MarkdownOptions) -> [Annotation] {
+        guard let markdown = prepared.markdown else { return [] }
+        guard options != markdown.options else { return [] }
+        prepared = DocumentPrep.prepare(markdown: markdown.text,
+                                        baseURL: source.path.map {
+                                            URL(fileURLWithPath: $0).deletingLastPathComponent()
+                                        },
+                                        options: options)
+        rebuildPage()
+        // The blocks are renumbered by the runtime when the page loads, and the quotes are
+        // what survive — which is the same bet the export makes, and the reason it is a
+        // safe one to make here.
+        let shadow = MarkdownShadow.build(markdown.text, options: options)
+        return annotations.filter { MarkdownLocator.locate($0.anchor, in: shadow) == nil }
     }
 
     private func rebuildPage() {

@@ -2,6 +2,18 @@ import Foundation
 import AppKit
 import UniformTypeIdentifiers
 
+/// A Markdown document, and the settings it was read under.
+///
+/// Both, together, because either alone is useless: the same file read as CommonMark and
+/// as Kramdown is two different documents on the screen, and the annotations were made
+/// against one of them. This is what makes reopening a review show what was reviewed.
+struct MarkdownSource: Codable, Equatable, Sendable {
+    /// The file, byte for byte as it arrived. Never rewritten — it is the thing an
+    /// assistant acting on the review will be editing, and `MarkdownLocator` searches it.
+    var text: String
+    var options: MarkdownOptions
+}
+
 /// A document that has been made safe to show, together with what that cost.
 struct PreparedDocument: Codable, Equatable, Sendable {
     /// Body markup, scrubbed, with local images inlined.
@@ -14,8 +26,19 @@ struct PreparedDocument: Codable, Equatable, Sendable {
     /// inspector so a missing figure is explained rather than just missing.
     var missingImages: [String]
 
+    /// The Markdown behind `body`, when the document arrived as Markdown rather than HTML.
+    ///
+    /// **Optional, and it has to stay Optional.** This type is decoded by the synthesised
+    /// decoder, which falls back to nil for a missing Optional key and *throws* for a
+    /// missing one of any other kind — and `ReviewDocument.init(configuration:)` turns a
+    /// throw into "these bytes must be HTML". A non-optional field added here would not
+    /// fail loudly; it would make every review saved before it existed reopen as a review
+    /// of its own JSON. The same trap is written up at length in `Annotation.init(from:)`.
+    var markdown: MarkdownSource?
+
     static let empty = PreparedDocument(body: "", css: "", title: nil,
-                                        report: SanitizationReport(), missingImages: [])
+                                        report: SanitizationReport(), missingImages: [],
+                                        markdown: nil)
 }
 
 /// Takes raw HTML off the disk and turns it into something the review window can show.
@@ -48,7 +71,46 @@ enum DocumentPrep {
         var missing: [String] = []
         let body = inlineImages(in: clean.body, baseURL: baseURL, missing: &missing)
         return PreparedDocument(body: body, css: clean.css, title: clean.title,
-                                report: clean.report, missingImages: missing)
+                                report: clean.report, missingImages: missing, markdown: nil)
+    }
+
+    /// Prepare a Markdown document: render it, then treat the result exactly as any other
+    /// untrusted HTML.
+    ///
+    /// The order is the point. Apex's output is not trusted because Apex produced it — a
+    /// Markdown file may contain raw HTML, and `MarkdownRenderer` deliberately lets it
+    /// through so that the document under review is the document that was sent. What makes
+    /// it safe is the same sanitizer and the same CSP that a `.html` goes through, with
+    /// nothing added and nothing skipped.
+    static func prepare(markdown: String, baseURL: URL?,
+                        options: MarkdownOptions) -> PreparedDocument {
+        let html = MarkdownRenderer.html(for: markdown, options: options)
+        var document = prepare(html: html, baseURL: baseURL)
+        // A rendered fragment has no `<title>`; its name is its first heading, which is
+        // what a reader would call it too.
+        document.title = document.title ?? firstHeading(in: document.body)
+        document.markdown = MarkdownSource(text: markdown, options: options)
+        return document
+    }
+
+    /// The text of the first `<h1>`, for a document that has no title of its own.
+    private static func firstHeading(in body: String) -> String? {
+        guard let open = body.range(of: "<h1", options: .caseInsensitive),
+              let gt = body[open.upperBound...].firstIndex(of: ">"),
+              let close = body.range(of: "</h1", options: .caseInsensitive,
+                                     range: gt..<body.endIndex) else { return nil }
+        let inner = body[body.index(after: gt)..<close.lowerBound]
+        // Tags out: a heading with a `<code>` span in it is still a name.
+        var text = ""
+        var depth = 0
+        for ch in inner {
+            if ch == "<" { depth += 1 } else if ch == ">" { depth -= 1 } else if depth == 0 {
+                text.append(ch)
+            }
+        }
+        let name = HTMLSanitizer.decodeEntities(text)
+            .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        return name.isEmpty ? nil : name
     }
 
     // MARK: - Images

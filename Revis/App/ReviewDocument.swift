@@ -5,6 +5,10 @@ import CryptoKit
 extension UTType {
     /// A saved review: the document snapshot plus the marks on it.
     static let revisReview = UTType(exportedAs: "app.revis.review")
+    /// Imported, not exported — the identifier belongs to Daring Fireball and is declared
+    /// already by every Markdown editor on the disk. See `project.yml`.
+    static let markdown = UTType(importedAs: "net.daringfireball.markdown",
+                                 conformingTo: .plainText)
 }
 
 /// Where the document under review came from.
@@ -61,7 +65,7 @@ struct ReviewFile: Codable, Equatable, Sendable {
 /// `.html` therefore starts a review of it and the first save asks where to put the
 /// `.revis` — which is the right shape, because reviewing a file should never modify it.
 struct ReviewDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.revisReview, .html] }
+    static var readableContentTypes: [UTType] { [.revisReview, .html, .markdown] }
     static var writableContentTypes: [UTType] { [.revisReview] }
 
     var file: ReviewFile
@@ -73,6 +77,9 @@ struct ReviewDocument: FileDocument {
     /// and prepared by the window, which does know where it came from. See
     /// `ReviewRootView`.
     var pendingHTML: String?
+
+    /// Markdown that still has to be rendered and prepared, for the same reason.
+    var pendingMarkdown: String?
 
     /// A new, empty review. Reachable through File ▸ New; the window shows it as the
     /// place to open a document rather than as a blank page.
@@ -93,13 +100,33 @@ struct ReviewDocument: FileDocument {
             return
         }
 
-        let html = String(decoding: data, as: UTF8.self)
+        let text = String(decoding: data, as: UTF8.self)
         let name = configuration.file.filename ?? "Document"
         file = ReviewFile(
             source: SourceInfo(name: name, path: nil, capturedAt: .reviewStamp,
                                digest: SourceInfo.digest(of: data)),
             document: .empty)
-        pendingHTML = html
+
+        // HTML or Markdown, and here the declared type DOES get a say — unlike the review
+        // above, which is decided by content because a `.revis` either parses as one or
+        // does not. No such test exists between these two: a Markdown file is plain text,
+        // and plain text containing `<p>` is a legitimate Markdown document that happens to
+        // embed HTML. So the name is asked first (it is what the author meant), and the
+        // declared type only where there is no name to ask.
+        if isMarkdown(name: name, type: configuration.contentType) {
+            pendingMarkdown = text
+        } else {
+            pendingHTML = text
+        }
+    }
+
+    private static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd"]
+
+    private func isMarkdown(name: String, type: UTType?) -> Bool {
+        let ext = (name as NSString).pathExtension.lowercased()
+        if Self.markdownExtensions.contains(ext) { return true }
+        if ext == "html" || ext == "htm" { return false }
+        return type?.conforms(to: .markdown) ?? false
     }
 
     /// Writes the review, and **only** ever the review.

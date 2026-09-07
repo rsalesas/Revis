@@ -29,6 +29,12 @@ enum ReviewExport {
 
     /// The review as instructions, in document order.
     static func markdown(_ file: ReviewFile, filter: AnnotationFilter = .open) -> String {
+        // Built once for the whole export rather than per item: it is a scan of the entire
+        // source, and a review of a three-hundred-page specification carries three hundred
+        // items.
+        let shadow = file.document.markdown.map {
+            MarkdownShadow.build($0.text, options: $0.options)
+        }
         let ordered = file.annotations.inDocumentOrder()
         let visible = ordered.filter { filter.admits($0) }
         let open = visible.filter { $0.status == .open }
@@ -54,7 +60,7 @@ enum ReviewExport {
         if !requests.isEmpty {
             out += "\n## Requested changes\n"
             for (index, annotation) in requests.enumerated() {
-                out += item(annotation, number: index + 1)
+                out += item(annotation, number: index + 1, in: shadow)
             }
         }
         if !questions.isEmpty {
@@ -64,7 +70,7 @@ enum ReviewExport {
                 + " for where an answer goes. If answering reveals that the document is"
                 + " wrong, say so rather than quietly correcting it.\n"
             for (index, annotation) in questions.enumerated() {
-                out += item(annotation, number: requests.count + index + 1)
+                out += item(annotation, number: requests.count + index + 1, in: shadow)
             }
         }
         if !observations.isEmpty {
@@ -74,7 +80,8 @@ enum ReviewExport {
                 + " be left as it stands.\n"
             for (index, annotation) in observations.enumerated() {
                 out += item(annotation,
-                            number: requests.count + questions.count + index + 1)
+                            number: requests.count + questions.count + index + 1,
+                            in: shadow)
             }
         }
         // After the last actionable item and before the endnotes: Declined and Already
@@ -181,6 +188,12 @@ enum ReviewExport {
         lines.append("**Source** `\(file.source.name)`"
             + (file.source.digest.isEmpty ? ""
                : "  ·  SHA-256 `\(file.source.digest)`"))
+        // Which dialect the source was read as, because it is not a detail: the same file
+        // read as CommonMark and as Kramdown is two different documents, and a reader told
+        // to change "the table in §3" should know whether the reviewer saw a table.
+        if let markdown = file.document.markdown {
+            lines.append("**Format** Markdown — \(markdown.options.summary)")
+        }
         lines.append("**Captured** \(Self.formatter.string(from: file.source.capturedAt))")
         var counts = ["\(requests) requested change\(requests == 1 ? "" : "s")"]
         if questions > 0 { counts.append("\(questions) question\(questions == 1 ? "" : "s")") }
@@ -188,7 +201,25 @@ enum ReviewExport {
         if resolved > 0 { counts.append("\(resolved) resolved") }
         lines.append("**Contents** " + counts.joined(separator: ", "))
 
-        return lines.joined(separator: "  \n") + """
+        let markdownNote = file.document.markdown == nil ? "" : """
+
+
+        > **The document is Markdown. This review was made against it rendered.**
+        >
+        > Those are two spellings of the same document, and the one you are editing is the
+        > source. So quoted text below is given **as the source file writes it** — markup
+        > and all — wherever those words could be located in it, which is what makes a
+        > quote something you can search the file for. The reading from the page is given
+        > underneath it where the two differ, because that is the one that reads as a
+        > sentence.
+        >
+        > A few items say instead that their words are **on the page but not in the source**.
+        > That is not a failure to look: a table of contents, a footnote's back-link and the
+        > numbering are produced by rendering the file and are nowhere in it. Find those by
+        > reading, and change whatever produces them.
+        """
+
+        return lines.joined(separator: "  \n") + markdownNote + """
 
 
         > **How to apply this review.**
@@ -224,7 +255,8 @@ enum ReviewExport {
         """
     }
 
-    private static func item(_ annotation: Annotation, number: Int) -> String {
+    private static func item(_ annotation: Annotation, number: Int,
+                             in shadow: MarkdownShadow?) -> String {
         var out = "\n### \(number). \(annotation.intent.title) — \(location(annotation))\n\n"
         out += "\(annotation.intent.directive)\n\n"
 
@@ -244,7 +276,35 @@ enum ReviewExport {
         } else {
             out += "**Find this text**\n\n"
         }
-        out += quoteBlock(annotation.anchor.quote) + "\n"
+
+        // For a Markdown document the words on the page and the words in the file are two
+        // different strings, and the file is the one being edited. So the file's spelling
+        // leads — markup and all, because `**ninety days**` is what a search for it will
+        // actually have to match — and the page's reading follows, because that is what the
+        // reviewer was looking at and the only thing that reads as a sentence.
+        if let shadow, let found = MarkdownLocator.locate(annotation.anchor, in: shadow) {
+            out += quoteBlock(found.sourceQuote) + "\n"
+            if found.sourceQuote != annotation.anchor.quote {
+                out += "\n**As it reads on the page**\n\n"
+                    + quoteBlock(annotation.anchor.quote) + "\n"
+            }
+            if found.confidence == .ambiguous {
+                out += "\n_These words occur more than once in the source and nothing in the"
+                    + " annotation separated the occurrences. Use **Context** below to pick"
+                    + " the right one._\n"
+            }
+        } else {
+            out += quoteBlock(annotation.anchor.quote) + "\n"
+            if shadow != nil {
+                // Said rather than skipped. Some of what a reviewer can mark is not in the
+                // file at all — a generated table of contents, a footnote's back-link, the
+                // numbering — and an item that quietly quoted the page as though it were
+                // the source would send a reader hunting for a string that is not there.
+                out += "\n_These words are on the page but not in the source file: they are"
+                    + " produced by rendering it. Find this by reading, not by searching, and"
+                    + " change whatever in the source produces it._\n"
+            }
+        }
 
         if let context = context(annotation.anchor) {
             out += "\n**Context**\n\n" + quoteBlock(context) + "\n"
@@ -401,6 +461,15 @@ enum ReviewExport {
             var location: String
             var role: String
             var quote: String
+            /// The same words as the SOURCE file writes them, for a Markdown document —
+            /// null when the document was HTML, or when the words are produced by
+            /// rendering and are not in the file at all. A consumer applying a review to a
+            /// `.md` should match on this and fall back to `quote`.
+            var sourceQuote: String?
+            /// How the occurrence was picked: `unique`, `byContext`, `bySection`, or
+            /// `ambiguous` — the last meaning the words occur several times and nothing
+            /// separated them, so `contextBefore`/`contextAfter` have to.
+            var sourceQuoteConfidence: String?
             var contextBefore: String
             var contextAfter: String
             var blocks: [Int]
@@ -426,9 +495,14 @@ enum ReviewExport {
             var items: [Item]
         }
 
+        let shadow = file.document.markdown.map {
+            MarkdownShadow.build($0.text, options: $0.options)
+        }
         let items = file.annotations.inDocumentOrder()
             .filter { filter.admits($0) }
             .map { annotation in
+                let found = shadow.flatMap { MarkdownLocator.locate(annotation.anchor, in: $0) }
+                return
                 Item(id: annotation.exportID,
                      operation: annotation.intent.rawValue,
                      directive: annotation.intent.directive,
@@ -440,6 +514,8 @@ enum ReviewExport {
                      location: annotation.anchor.path,
                      role: annotation.anchor.role,
                      quote: annotation.anchor.quote,
+                     sourceQuote: found?.sourceQuote,
+                     sourceQuoteConfidence: found?.confidence.rawValue,
                      contextBefore: annotation.anchor.prefix,
                      contextAfter: annotation.anchor.suffix,
                      blocks: annotation.anchor.blocks,
@@ -454,7 +530,11 @@ enum ReviewExport {
 
         let payload = Payload(
             source: file.source,
-            guidance: "Locate each item by searching for `quote`. `blocks` and"
+            guidance: (file.document.markdown == nil ? "" : "The document is Markdown and"
+                + " was reviewed rendered: match on `sourceQuote` where it is present, and"
+                + " on `quote` — the words as they read on the page — where it is null."
+                + " ")
+                + "Locate each item by searching for `quote`. `blocks` and"
                 + " `characterRange` describe the reviewed snapshot and are not reliable"
                 + " once the document has been rewritten."
                 + " `replies` is what was said back about an item and is a record of a"
