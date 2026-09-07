@@ -43,7 +43,16 @@ struct FileFormatTests {
                            anchor: text),
                 Annotation(author: "Robert Salesas", intent: .question,
                            note: "Does \"all backups\" include the offsite weeklies?",
-                           anchor: region),
+                           anchor: region,
+                           replies: [
+                               Reply(author: "Claude",
+                                     text: "No — §2 says \"all backups taken after the"
+                                         + " deletion request\", which excludes the"
+                                         + " offsite weeklies written before it.",
+                                     isAssistant: true),
+                               Reply(author: "Robert Salesas",
+                                     text: "Then the definition needs to say so."),
+                           ]),
             ])
     }
 
@@ -56,6 +65,64 @@ struct FileFormatTests {
         // that a regenerated document cannot invalidate.
         #expect(restored.annotations[1].anchor.quote.contains("Irreversible removal"))
         #expect(restored.annotations[1].anchor.isRegion)
+        // A thread survives in order and keeps who said what, including which remark came
+        // from a machine.
+        #expect(restored.annotations[1].replies.map(\.isAssistant) == [true, false])
+    }
+
+    /// A review saved before replies existed still opens.
+    ///
+    /// This is the test the whole feature turns on, and it is written as raw JSON rather
+    /// than by re-encoding a value, because re-encoding could only ever produce a file this
+    /// build already agrees with. Swift's synthesised decoder throws on a missing key even
+    /// when the property has a default — so `replies` arriving with no `init(from:)` would
+    /// have made every existing file undecodable. And `ReviewDocument` swallows a decode
+    /// failure with `try?` and falls through to treating the bytes as HTML, so nobody would
+    /// have seen an error: the review would simply have reopened empty, as a document of
+    /// its own JSON.
+    @Test func aReviewSavedBeforeRepliesExistedStillOpens() throws {
+        let json = """
+        {
+          "annotations" : [
+            {
+              "anchor" : { "blocks" : [3], "end" : 108, "path" : "1. Scope › paragraph 1",
+                "prefix" : "retains", "quote" : "each class of record", "role" : "paragraph",
+                "start" : 88, "suffix" : ", what triggers deletion." },
+              "author" : "Robert Salesas", "created" : "2026-09-04T11:00:00Z",
+              "id" : "8BF77E0F-0000-4000-8000-000000000001",
+              "intent" : "change", "note" : "Say category.", "status" : "open"
+            }
+          ],
+          "app" : "Revis 0.9",
+          "document" : { "body" : "<h1>x</h1>", "css" : "", "missingImages" : [],
+            "report" : { "dangerousURLs" : 0, "eventHandlers" : 0, "frames" : 0,
+              "interactive" : 0, "remoteResources" : 0, "scripts" : 0 } },
+          "format" : 1,
+          "source" : { "capturedAt" : "2026-09-04T10:00:00Z", "digest" : "abc",
+            "name" : "spec.html" }
+        }
+        """
+        let file = try JSONDecoder.revis.decode(ReviewFile.self, from: Data(json.utf8))
+        #expect(file.annotations.count == 1)
+        #expect(file.annotations[0].replies.isEmpty)
+        #expect(file.annotations[0].note == "Say category.")
+    }
+
+    /// The other half of the same guarantee: a file missing the fields that have always had
+    /// defaults is read rather than refused. These were required keys before `init(from:)`
+    /// existed, for no reason anybody intended.
+    @Test func anAnnotationNeedsOnlyAnIntentAndAnAnchor() throws {
+        let json = """
+        { "anchor" : { "blocks" : [1], "end" : -1, "path" : "", "prefix" : "",
+            "quote" : "some words", "role" : "paragraph", "start" : -1, "suffix" : "" },
+          "intent" : "remove" }
+        """
+        let annotation = try JSONDecoder.revis.decode(Annotation.self, from: Data(json.utf8))
+        #expect(annotation.author.isEmpty)
+        #expect(annotation.note.isEmpty)
+        #expect(annotation.status == .open)
+        #expect(annotation.verdict == nil)
+        #expect(annotation.replies.isEmpty)
     }
 
     /// Writes a specimen out for reading by eye. Not an assertion about the file so much

@@ -262,6 +262,30 @@ struct Anchor: Codable, Equatable, Hashable, Sendable {
 
 // MARK: - The annotation
 
+/// Something said back about an annotation.
+///
+/// Not an annotation of its own, and the difference is the whole of why this type exists: a
+/// reply has no anchor, because it is not about a place in the document — it is about what
+/// somebody said about that place. Giving it an anchor would put "the answer to your
+/// question" on the page as a second mark on the same words.
+struct Reply: Identifiable, Codable, Equatable, Sendable {
+    var id: UUID = UUID()
+    /// `.reviewStamp`, never `Date()`. The coders are ISO-8601 without fractional seconds,
+    /// so a date carrying them does not survive a save and a reload as the same value.
+    var created: Date = .reviewStamp
+    var author: String
+    /// What was said, verbatim — prose, Markdown and all.
+    var text: String
+    /// Whether this arrived from an assistant rather than being typed here by a person.
+    ///
+    /// Set by whatever imports it and never by the document being imported: a flag a file
+    /// can set says whatever the file says. The two mistakes are not the same size. A
+    /// hand-written reply marked as a machine's is a cosmetic over-attribution; a model's
+    /// answer wearing a colleague's name is a reviewer trusting a sentence that nobody
+    /// stands behind.
+    var isAssistant: Bool = false
+}
+
 /// One mark on the document, with the instruction that goes with it.
 ///
 /// Identified by a UUID rather than by its position, because a review is saved, reopened
@@ -280,6 +304,59 @@ struct Annotation: Identifiable, Codable, Equatable, Sendable {
     var verdict: Verdict?
     /// Who decided. Kept because "declined" without a name is an anonymous veto.
     var verdictBy: String?
+    /// What has been said back about it, oldest first. Not gated by authorship or by a
+    /// verdict: replying is a RESPONSE, in the same category as resolving and deciding.
+    var replies: [Reply] = []
+
+    /// The id as it is printed and as it is matched: lowercase, hyphenated.
+    ///
+    /// One property rather than `uuidString` at each call site, because the Markdown export
+    /// and the JSON have to print the same characters — a reviewer who copies an id out of
+    /// one and searches the other is entitled to find it.
+    var exportID: String { id.uuidString.lowercased() }
+
+    /// Decoded by hand, and this is not tidiness.
+    ///
+    /// Swift's synthesised decoder does NOT fall back to a property's default when a key is
+    /// missing — it throws. So the day `replies` was added, every `.revis` file already on
+    /// disk stopped decoding; and `ReviewDocument.init(configuration:)` swallows a decode
+    /// failure with `try?` and falls through to treating the bytes as HTML, so the symptom
+    /// was not an error but a saved review silently reopening as a fresh review OF ITS OWN
+    /// JSON, with every annotation gone.
+    ///
+    /// Only `intent` and `anchor` are required, because an annotation without them is not
+    /// one. Everything else has a defensible default, and a file that refuses to open is a
+    /// file lost — the same policy as `Intent.init(from:)` above, for the same reason.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        created = try container.decodeIfPresent(Date.self, forKey: .created) ?? .reviewStamp
+        author = try container.decodeIfPresent(String.self, forKey: .author) ?? ""
+        intent = try container.decode(Intent.self, forKey: .intent)
+        note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
+        anchor = try container.decode(Anchor.self, forKey: .anchor)
+        status = try container.decodeIfPresent(AnnotationStatus.self, forKey: .status) ?? .open
+        verdict = try container.decodeIfPresent(Verdict.self, forKey: .verdict)
+        verdictBy = try container.decodeIfPresent(String.self, forKey: .verdictBy)
+        replies = try container.decodeIfPresent([Reply].self, forKey: .replies) ?? []
+    }
+
+    /// Written back out by hand only because writing `init(from:)` cost the synthesised
+    /// memberwise initialiser, which every call site uses.
+    init(id: UUID = UUID(), created: Date = .reviewStamp, author: String, intent: Intent,
+         note: String, anchor: Anchor, status: AnnotationStatus = .open,
+         verdict: Verdict? = nil, verdictBy: String? = nil, replies: [Reply] = []) {
+        self.id = id
+        self.created = created
+        self.author = author
+        self.intent = intent
+        self.note = note
+        self.anchor = anchor
+        self.status = status
+        self.verdict = verdict
+        self.verdictBy = verdictBy
+        self.replies = replies
+    }
 
     /// Whether this should be acted on. A declined request is one somebody refused.
     var isActionable: Bool { status == .open && verdict != .declined }
