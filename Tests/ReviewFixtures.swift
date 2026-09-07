@@ -116,7 +116,13 @@ extension ReviewFixtures {
     ]
 
     static func document(_ name: String = "data-retention-spec.html") -> Document {
-        let raw = html(name)
+        document(html: html(name))
+    }
+
+    /// The same walk over markup that is already in hand rather than on disk — a Markdown
+    /// document, rendered. One implementation, so a fixture built from a `.md` is stamped
+    /// by exactly the rules a fixture built from a `.html` is.
+    static func document(html raw: String) -> Document {
         let body = HTMLSanitizer.sanitize(raw).body
         let scanned = elements(in: body)
 
@@ -205,7 +211,13 @@ extension ReviewFixtures {
             cursor = inner.index(after: close)
         }
         out += inner[cursor...]
-        return out.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        // Decoded, because the runtime never sees an entity: `textOf` walks TEXT NODES,
+        // which the parser has already turned `&quot;` back into a quotation mark in. A
+        // fixture that skipped this built anchors the app would never produce — invisible
+        // until a document contained an entity inside a block somebody marked, which the
+        // HTML sample happens not to.
+        return HTMLSanitizer.decodeEntities(out)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
     }
 
