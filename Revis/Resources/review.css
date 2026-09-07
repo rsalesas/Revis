@@ -151,6 +151,31 @@ body.rv-fitting #rv-doc > pre { max-width: none; }
 body.rv-fitting.rv-plain #rv-doc {
   max-width: 54em;
   margin: 0 auto;
+  /* FIT WIDTH HAS TO MAKE THE TEXT BIGGER, or it is not a zoom, it is a reflow.
+   *
+   * The sheet fills its window by layout and always did — that is what stopped it lagging
+   * behind a pane animation, and it is not up for renegotiation. But filling at 100% type
+   * means a wider window buys more room and not a larger document, which is not what Fit
+   * Width means anywhere else and not what it means here either.
+   *
+   * `fitZoom()` in review.js already computes the answer — available width over the
+   * sheet's nominal 920 — and deliberately does not apply it, because a zoom that script
+   * sets arrives a process and a resize event later. So the same ratio is taken here
+   * instead, where it costs no script and lands in the reflow WebKit is already doing:
+   * 15px of type at 920 points of measure, scaled by however much room there really is.
+   * Keep the two in step — the status bar reads `fitZoom()`, and stepping out of Fit with
+   * + or − carries on from that number, so a document that grew by a different ratio would
+   * jump the moment it was touched.
+   *
+   * `em` on a non-font property is the element's OWN font size, so the measure above scales
+   * with the type and the proportions hold at every width.
+   *
+   * Only for a document with no stylesheet, and that is a real limit rather than an
+   * oversight: a document that sets its own type in px is unmoved by a base size, and
+   * making it scale means a layout-computed `zoom` on the sheet — which is the width
+   * `rvHold` transitions during a pane animation. Not a thing to change without measuring
+   * it. */
+  font-size: clamp(6px, calc((100vw - 2 * var(--rv-gutter)) * 15 / 920), 48px);
 }
 body.rv-fitting.rv-plain #rv-doc > *,
 body.rv-fitting.rv-plain #rv-doc > table,
