@@ -50,7 +50,14 @@ enum ReviewExport {
 
         var out = "# Review of \(file.document.title ?? file.source.name)\n\n"
         out += preamble(file, requests: requests.count, questions: questions.count,
-                        observations: observations.count, resolved: resolved.count)
+                        observations: observations.count, declined: declined.count,
+                        // What will actually be BELOW, not what the review holds. The
+                        // resolved section is only written when the filter asks for it, so
+                        // counting them regardless advertised a section that was not there
+                        // — and a reader who goes looking for it concludes the file is
+                        // truncated. Declined was the same fault the other way round: a
+                        // section printed and never announced.
+                        resolved: filter == .open ? 0 : resolved.count)
 
         if requests.isEmpty && questions.isEmpty && observations.isEmpty {
             out += "\n## Nothing outstanding\n\nNo changes are requested.\n"
@@ -180,7 +187,7 @@ enum ReviewExport {
     /// quoted string is authoritative, and it will guess wrong on a regenerated document —
     /// silently, and in a way that puts an edit in the wrong place.
     private static func preamble(_ file: ReviewFile, requests: Int, questions: Int,
-                                 observations: Int, resolved: Int) -> String {
+                                 observations: Int, declined: Int, resolved: Int) -> String {
         var lines: [String] = []
         // The WHOLE digest. It was printed truncated, which is the same as not printing
         // it: a reader cannot check that the document in front of it is the one the review
@@ -198,6 +205,7 @@ enum ReviewExport {
         var counts = ["\(requests) requested change\(requests == 1 ? "" : "s")"]
         if questions > 0 { counts.append("\(questions) question\(questions == 1 ? "" : "s")") }
         if observations > 0 { counts.append("\(observations) observation\(observations == 1 ? "" : "s")") }
+        if declined > 0 { counts.append("\(declined) declined") }
         if resolved > 0 { counts.append("\(resolved) resolved") }
         lines.append("**Contents** " + counts.joined(separator: ", "))
 
@@ -307,7 +315,14 @@ enum ReviewExport {
         }
 
         if let context = context(annotation.anchor) {
-            out += "\n**Context**\n\n" + quoteBlock(context) + "\n"
+            // The quote above may be the SOURCE's spelling; this is always the page's. Two
+            // spellings in one item with only one of them labelled is a trap, and a real
+            // reader fell into it: it pasted words from here onto the end of the quote and
+            // searched for a string that exists in neither document. Naming the difference
+            // costs four words.
+            out += shadow == nil ? "\n**Context**\n\n"
+                                 : "\n**Context** — as it reads on the page\n\n"
+            out += quoteBlock(context) + "\n"
         }
 
         // An agreed item says so. It is the difference between one person's opinion and a
@@ -335,8 +350,16 @@ enum ReviewExport {
         // Trailing double space is Markdown's hard break, as used by the preamble.
         out += "\n<sub>Item `\(annotation.exportID)` — name this id if you reply to this"
             + " item.</sub>  \n"
-        out += "<sub>Anchor: \(anchorHint(annotation.anchor)) — positional, "
-            + "use only to break a tie between identical quotes.</sub>\n"
+        // The block index and character offsets are measured against the RENDERED
+        // document. For HTML that is the document being edited and they are a usable, if
+        // brittle, tie-break. For Markdown it is not: the source has no blocks, its
+        // character offsets are different numbers, and there is nothing a reader can do
+        // with them except mistake them for source positions. Offered only where they
+        // mean something.
+        if shadow == nil {
+            out += "<sub>Anchor: \(anchorHint(annotation.anchor)) — positional, "
+                + "use only to break a tie between identical quotes.</sub>\n"
+        }
         return out
     }
 

@@ -301,12 +301,12 @@ enum LargeDocument {
         "an operator with break-glass access", "the reconciliation pass",
         "every cohort smaller than the disclosure threshold", "the export scheduler",
     ]
-    private static let verbs = [
+    static let verbs = [
         "must record", "is required to publish", "may not retain", "will reconcile",
         "shall emit", "is expected to acknowledge", "must not propagate", "will withhold",
         "is obliged to redact", "must replay", "shall defer", "is permitted to batch",
     ]
-    private static let objects = [
+    static let objects = [
         "a durable tombstone for every deleted row",
         "the identifier of the requesting principal",
         "the point-in-time snapshot the delete was issued against",
@@ -318,7 +318,7 @@ enum LargeDocument {
         "the residual copies held in the warm tier",
         "every index entry that would otherwise resurrect the row",
     ]
-    private static let qualifiers = [
+    static let qualifiers = [
         "within one scheduling interval", "before the next reconciliation pass",
         "unless a legal hold is in force", "except where the record is under audit",
         "for the duration of the retention period", "in the same transaction",

@@ -301,6 +301,70 @@ struct MarkdownTests {
         #expect(ReviewExport.json(file).contains("\"sourceQuote\""))
     }
 
+    /// Three faults a real model found in one sitting, pinned so they cannot come back.
+    ///
+    /// None of them stopped it locating anything; all three cost it work, and the second
+    /// cost it seven wrong searches before it worked out why.
+    @Test func theExportDoesNotMisleadAReaderEditingTheSource() throws {
+        let prepared = DocumentPrep.prepare(markdown: Self.spec, baseURL: nil,
+                                            options: .default)
+        func mark(_ quote: String, _ intent: Intent = .change) -> Annotation {
+            Annotation(author: "RS", intent: intent, note: "x",
+                       anchor: Anchor(blocks: [3], path: "3. Retention periods",
+                                      role: "paragraph", quote: quote,
+                                      prefix: "All personal data is ", suffix: " from the",
+                                      start: 0, end: quote.count, rect: nil))
+        }
+        var declined = mark("Deletion is irreversible.")
+        declined.decide(.declined, by: "Priya Raman")
+        var resolved = mark("Tokens are rotated on each sign-in.", .comment)
+        resolved.status = .resolved
+
+        let file = ReviewFile(
+            source: SourceInfo(name: "spec.md", path: nil, capturedAt: .reviewStamp,
+                               digest: ""),
+            document: prepared,
+            annotations: [mark("is retained for a period of ninety (90) days from"),
+                          declined, resolved])
+        let markdown = ReviewExport.markdown(file)
+
+        // 1. The contents line counts what is BELOW it. It announced a resolved section
+        //    that the open filter never writes, and stayed silent about a declined one it
+        //    always writes — so the totals matched nothing a reader could count.
+        #expect(markdown.contains("1 declined"))
+        #expect(!markdown.contains("1 resolved"))
+        #expect(markdown.contains("## Declined"))
+        #expect(!markdown.contains("## Already resolved"))
+
+        // 2. Two spellings in one item, and the reader was told which only for one of them.
+        #expect(markdown.contains("**Context** — as it reads on the page"))
+
+        // 3. A block index and character offsets measured against the rendered document
+        //    are not positions in the file being edited, and there is nothing to do with
+        //    them but mistake them for some.
+        #expect(!markdown.contains("<sub>Anchor:"))
+    }
+
+    /// And an HTML document keeps the hint, because there the rendered document IS the one
+    /// being edited — the same reasoning, reaching the opposite answer.
+    @Test func anHTMLExportKeepsThePositionalHintAndNeedsNoLabel() {
+        let prepared = DocumentPrep.prepare(html: "<h1>T</h1><p>Hello there now</p>",
+                                            baseURL: nil)
+        let file = ReviewFile(
+            source: SourceInfo(name: "a.html", path: nil, capturedAt: .reviewStamp,
+                               digest: ""),
+            document: prepared,
+            annotations: [Annotation(
+                author: "RS", intent: .change, note: "x",
+                anchor: Anchor(blocks: [1], path: "", role: "paragraph",
+                               quote: "Hello there", prefix: "", suffix: " now",
+                               start: 0, end: 11, rect: nil))])
+        let markdown = ReviewExport.markdown(file)
+        #expect(markdown.contains("<sub>Anchor:"))
+        #expect(markdown.contains("**Context**"))
+        #expect(!markdown.contains("as it reads on the page"))
+    }
+
     /// An HTML document must come out exactly as it did before any of this existed — no
     /// format line, no note about a source file it does not have.
     @Test func anHTMLDocumentIsUntouchedByAnyOfThis() {
