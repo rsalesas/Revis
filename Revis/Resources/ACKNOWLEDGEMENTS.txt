@@ -1,3 +1,7 @@
+Revis itself is source-available under the PolyForm Noncommercial 1.0.0
+licence — see the LICENSE file. The software listed below is not: it is open
+source, under its own terms, and nothing about Revis's licence changes yours.
+
 Revis renders Markdown with the help of the open source software listed below.
 Each licence is reproduced in full, as its terms require.
 

@@ -268,6 +268,19 @@ stylesheet aside for a plain reading style, for documents that arrive genuinely 
 read. It is loud about being on: what you are looking at then is *not* how the document
 looks.
 
+## Licence
+
+Source-available, not open source. Revis is under the
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
+licence: read it, build it, change it, use it for anything noncommercial. Commercial use
+needs a separate licence — write to robert@salesas.com.
+
+That covers Revis's own source only. The Markdown engine and the two libraries under it are
+open source under their own terms, reproduced in full in
+`Revis/Resources/ACKNOWLEDGEMENTS.txt` and shown in the app under *Settings ▸
+Acknowledgements*. Nothing in Revis's licence withdraws any right those grant you in that
+software.
+
 ## Status
 
 First version, exercised end to end against a real generated document: opening and

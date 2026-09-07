@@ -64,7 +64,7 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
         LSApplicationCategoryType: "public.app-category.productivity"
-        NSHumanReadableCopyright: ""
+        NSHumanReadableCopyright: "Copyright © 2026 Robert Salesas. Source-available under PolyForm Noncommercial 1.0.0."
         CFBundleDocumentTypes:
           - CFBundleTypeName: Revis Review
             CFBundleTypeRole: Editor
