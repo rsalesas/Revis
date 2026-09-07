@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Customer Data Platform — Retention Specification</title>
+<style>
+  body { font-family: Georgia, serif; color: #23252b; }
+  h1 { letter-spacing: -0.01em; }
+  h2 { border-bottom: 1px solid #e3e3e6; padding-bottom: 0.2em; }
+  .callout { background: #f5f7fb; border-left: 3px solid #4a7fd0; padding: 0.8em 1em; }
+  table { font-size: 0.94em; }
+  code { background: #f2f2f4; padding: 0.1em 0.3em; border-radius: 3px; }
+</style>
+<!-- A generated document often carries these. Revis removes all of them. -->
+<script>window.__telemetry = { open: Date.now() };</script>
+</head>
+<body onload="__telemetry.loaded = true">
+
+<h1>Customer Data Platform — Retention Specification</h1>
+<p><em>Draft 3 · generated 2026-09-04</em></p>
+
+<h2>1. Scope</h2>
+<p>This document specifies how long the Customer Data Platform retains each class of
+record, what triggers deletion, and how deletion is evidenced. It applies to all
+environments including <code>staging</code>, which has historically been treated as
+exempt.</p>
+
+<div class="callout">
+  <p>Anything not named in §3 is out of scope and continues to follow the general
+  corporate retention schedule.</p>
+</div>
+
+<h2>2. Definitions</h2>
+<dl>
+  <dt>Collection event</dt>
+  <dd>The moment a record first enters the platform, whether by API, batch import, or
+  manual entry.</dd>
+  <dt>Deletion</dt>
+  <dd>Irreversible removal from primary storage, all replicas, and all backups taken
+  after the deletion request.</dd>
+</dl>
+
+<h2>3. Retention periods</h2>
+
+<h3>3.1 Personal data</h3>
+<p>All personal data is retained for a period of ninety (90) days from the date of
+collection, after which it is deleted automatically by the retention worker. Records
+under legal hold are exempt for the duration of the hold.</p>
+
+<p>Where a customer requests earlier deletion, the platform must action the request
+within thirty (30) days, and may not wait for the ordinary expiry.</p>
+
+<h3>3.2 Derived and aggregate data</h3>
+<p>Aggregates computed from personal data are retained indefinitely, on the basis that
+they contain no identifying information. Aggregates over cohorts smaller than fifty
+individuals are treated as personal data.</p>
+
+<h3>3.3 Summary</h3>
+<table>
+  <thead>
+    <tr><th>Class</th><th>Retention</th><th>Trigger</th><th>Evidence</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Personal data</td><td>90 days</td><td>Collection event</td><td>Worker log</td></tr>
+    <tr><td>Audit records</td><td>7 years</td><td>Write</td><td>Immutable store</td></tr>
+    <tr><td>Aggregates</td><td>Indefinite</td><td>—</td><td>None</td></tr>
+    <tr><td>Support transcripts</td><td>180 days</td><td>Ticket close</td><td>Worker log</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Deletion mechanics</h2>
+<p>The retention worker runs hourly. It selects expired records, writes a tombstone,
+and issues deletes against primary storage and each replica in turn. Backups are not
+rewritten; instead the tombstone is replayed when a backup is restored.</p>
+
+<figure>
+  <img src="figures/retention-worker.png" alt="Retention worker sequence diagram">
+  <figcaption>Figure 1 — The retention worker's delete sequence.</figcaption>
+</figure>
+
+<p>See also the <a href="https://internal.example.com/runbooks/retention">retention
+runbook</a>, and this <a href="javascript:void(0)">inline action</a>.</p>
+
+<h2>5. Open questions</h2>
+<ul>
+  <li>Does the 90-day period start at collection or at last access?</li>
+  <li>Who signs off on a legal hold, and where is that recorded?</li>
+  <li>Should staging retain anything at all?</li>
+</ul>
+
+<img src="https://tracker.example.com/pixel.gif" width="1" height="1">
+
+</body>
+</html>

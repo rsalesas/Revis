@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
+  <!--
+    The Revis app icon. This file is the master; every PNG in
+    Revis/Assets.xcassets/AppIcon.appiconset is rendered from it by
+    scripts/make-icon.sh. Edit here, never the PNGs.
+
+    Almost every number below was measured off Vaelora's shipped icon rather
+    than chosen, because the two apps are halves of one workflow and an icon
+    that is nearly its sibling reads worse than one that is plainly not:
+
+      - the 412x412 ground inset by 50 is Apple's 824-in-1024 content box;
+      - the sheet at 101,83 is Vaelora's sheet, to the pixel, including the
+        fact that it runs off the BOTTOM of the ground and is clipped there;
+      - #98908a is Vaelora's single ink. Its markdown glyphs are not a darker
+        colour than its rules, only heavier strokes, which is why there is
+        one grey here and not two.
+
+    What Revis spends its one saturated accent on is the difference. Vaelora
+    ends in a red PDF badge; this ends in a marked line and a chip pushed out
+    into the margin. #e0a03a is Change from AnnotationPalette — the commonest
+    intent, and the warmest — so the icon and the margin agree.
+
+    The type is set larger and sparser than a page of prose would be. That is
+    deliberate and it is the whole reason this variant was chosen: at 16pt in
+    the Dock a faithful page of body text is a grey smudge, and the mark, which
+    is the only thing worth seeing, goes with it.
+  -->
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b6275"/><stop offset="1" stop-color="#163846"/>
+    </linearGradient>
+    <linearGradient id="sheet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdf7ef"/><stop offset="1" stop-color="#f1e7dc"/>
+    </linearGradient>
+    <clipPath id="clip"><rect x="50" y="50" width="412" height="412" rx="92"/></clipPath>
+    <filter id="drop" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="9" stdDeviation="11" flood-color="#0b1c24" flood-opacity="0.34"/>
+    </filter>
+    <filter id="sheetDrop" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#0b1c24" flood-opacity="0.30"/>
+    </filter>
+  </defs>
+
+  <rect x="50" y="50" width="412" height="412" rx="92" fill="url(#ground)" filter="url(#drop)"/>
+
+  <g clip-path="url(#clip)">
+    <rect x="101" y="83" width="302" height="380" rx="9" fill="url(#sheet)" filter="url(#sheetDrop)"/>
+
+    <rect x="131" y="140" width="242" height="20" rx="6" fill="#98908a"/>
+    <rect x="131" y="202" width="242" height="20" rx="6" fill="#98908a"/>
+
+    <!-- The marked line. The band is wider than the ink it sits behind and the
+         ink stops short of its right edge, so it reads as text that has been
+         highlighted rather than as a row that has been selected. -->
+    <rect x="121" y="252" width="224" height="44" rx="12" fill="#e0a03a" fill-opacity="0.85"/>
+    <rect x="135" y="265" width="176" height="18" rx="6" fill="#6f665e"/>
+
+    <rect x="131" y="330" width="242" height="20" rx="6" fill="#98908a"/>
+    <rect x="131" y="392" width="186" height="20" rx="6" fill="#98908a"/>
+
+    <!-- The margin chip straddles the sheet's right edge (403) on purpose: the
+         mark belongs to the reviewer, not to the document it is about. -->
+    <rect x="374" y="250" width="64" height="50" rx="15" fill="#e0a03a"/>
+  </g>
+
+  <!-- Apple's icons carry a faint lit top edge; without it the squircle reads
+       as a flat sticker next to every other icon in the Dock. -->
+  <rect x="50.75" y="50.75" width="410.5" height="410.5" rx="91.25"
+        fill="none" stroke="#ffffff" stroke-opacity="0.16" stroke-width="1.5"/>
+</svg>

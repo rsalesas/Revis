@@ -1,0 +1,27 @@
+# Xcode
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# XcodeGen generates these from project.yml
+Revis.xcodeproj/
+Revis/Info.plist
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Code coverage artifacts
+*.profraw
+*.profdata
+
+# macOS
+.DS_Store
+
+# Secrets
+*.env

@@ -1,0 +1,500 @@
+/*
+ * The review chrome: the desk the document sits on, the gutter its marks live in, and
+ * the marks themselves.
+ *
+ * Loaded BEFORE the document's own stylesheet, so everything in here can be overridden
+ * by the document — except the `#rv-` chrome, which the document has no way to name
+ * because the sanitizer strips nothing it needs to and the ids are ours. That order is
+ * deliberate: the point of Revis is to review the document as it was sent, and a viewer
+ * that restyles what it is showing is reviewing something else.
+ */
+
+:root {
+  --rv-backdrop: #e4e4e6;
+  --rv-sheet: #ffffff;
+  --rv-ink: #1c1c1e;
+  --rv-rule: rgba(0, 0, 0, 0.10);
+  --rv-shadow: rgba(0, 0, 0, 0.16);
+  --rv-gutter-width: 38px;
+  /* The space round the sheet. One number, used by the stylesheet and measured by the
+     runtime, so the top and the sides cannot drift apart.
+
+     It was widened to 48px for a while, to try to absorb the lag a resizing sheet shows
+     against the pane beside it. It absorbed none of it — the lag is 130 points at the peak
+     of a pane's travel, not 24 — and the answer turned out to be `rvHold` in review.js
+     rather than a wider margin. Left at 24 so the sheet is sized by how it should look. */
+  --rv-gutter: 24px;
+  /* Mirrors `Motion.panel` in Swift. The two are the same curve on purpose: a mark
+     settling on the page and a pane taking width off it are the same app moving. */
+  --rv-motion-panel: cubic-bezier(0.65, 0, 0.35, 1);
+  --rv-motion-panel-duration: 340ms;
+  --rv-motion-hover: cubic-bezier(0, 0, 0.58, 1);
+  --rv-motion-hover-duration: 120ms;
+  --rv-motion-reveal: cubic-bezier(0, 0, 0.58, 1);
+  --rv-motion-reveal-duration: 180ms;
+}
+
+/* The sheet stays paper-white whatever the system appearance is.
+   A document under review is a document as it will be read, and re-tinting it to match
+   the reviewer's Dark Mode would mean marking up something nobody else will ever see.
+   Only the desk around it follows the appearance.
+
+   And it is TOLD, rather than asking. This was `@media (prefers-color-scheme: dark)`,
+   which can no longer work: the web view is pinned to a light appearance so the GUEST
+   document resolves its light palette against the white sheet, and a media query in here
+   would now read that pin rather than the reviewer's Mac. Swift knows the real answer and
+   pushes it through `rvSetDesk` — the same rule as the intent colours, one source and two
+   readers, with the page never allowed a second opinion. */
+html[data-rv-desk="dark"] { --rv-backdrop: #282828; --rv-shadow: rgba(0, 0, 0, 0.55); }
+
+html, body {
+  margin: 0;
+  background: var(--rv-backdrop);
+  -webkit-text-size-adjust: none;
+}
+
+/* The desk is FURNITURE, and the document does not get to paint it.
+ *
+ * A document's `body { background: … }` describes the page it believes it is painting,
+ * and it is not painting this one — the sheet is. The rule above lost to it, both being
+ * one element deep, so the spec's `--paper` tinted the desk instead: cream in the strip
+ * beside the sheet, and our backdrop below where the body box stopped. One window, two
+ * backgrounds, neither of them the appearance the app is running in.
+ *
+ * It was invisible until the guest was pinned to a light appearance — before that the
+ * document's dark `--paper` and our dark backdrop merely looked alike — so this is an old
+ * fault surfacing, not a new one.
+ *
+ * `html body` rather than `!important`: one element of specificity is all it takes to
+ * settle it, and it is the smallest thing that can be said here. Everything inside the
+ * sheet still overrides freely, which is the rule this file exists to state. */
+html body { background: var(--rv-backdrop); }
+
+/* The breathing room round the sheet lives HERE, on the unzoomed body, and is equal on
+   three sides.
+   It used to be a margin on `#rv-page` — which the page's own zoom scales, so at 119% the
+   top gap grew to thirty-odd points while the sides were whatever the fit arithmetic had
+   subtracted. Two different numbers arrived at two different ways, which is exactly how a
+   window ends up with a margin at the top and none at the sides. One number, outside the
+   zoom, and `fitZoom` measures against this element's content box so the fit cannot
+   disagree with it. */
+body {
+  padding: var(--rv-gutter) var(--rv-gutter) 96px;
+}
+
+/* A SHEET of a fixed measure, not a column that fills whatever it is given.
+ *
+ * This was `max-width`, and that is what made the zoom incomprehensible. CSS `zoom`
+ * divides the containing block's coordinate space, so above the fitting zoom the max-width
+ * stopped binding and the sheet reflowed to fill the pane: the page stayed exactly as wide
+ * on screen and only the text grew. Below it, the sheet shrank normally. One control, two
+ * behaviours, and no way to tell from the outside which one you were about to get — and
+ * "Fit Width" did nothing at all up there, because a sheet already filling the width is
+ * already fitted.
+ *
+ * A fixed width makes zoom mean one thing at every setting: the sheet is 920 points of
+ * measure and the zoom says how big those points are drawn. That is what Vaelora does with
+ * a page, it is what every document viewer does, and it is the model "Fit Width" belongs
+ * to. */
+#rv-page {
+  position: relative;
+  width: 920px;
+  margin: 0 auto;
+  /* NO transition on the zoom, and this is the whole point of the sheet.
+   *
+   * Easing it was copied from Vaelora, and it does not carry across, for a reason that
+   * took saying out loud to see: a Vaelora page is a fixed piece of paper that does not
+   * have to fill anything, so a zoom arriving late just means the margins around it are
+   * briefly wrong. This sheet must EXACTLY fill the viewport — that is what fitting means
+   * — so a zoom arriving late means the sheet is wider than the window that holds it, and
+   * a sheet wider than its window is clipped. The symptom is precisely "the white portion
+   * does not resize, it extends to the edge and gets cut off", and it lasted exactly as
+   * long as the transition did.
+   *
+   * The view is handed its final width in one step now (see `CollapsiblePane`), so there
+   * is nothing left to ease TOWARDS: the right answer is known immediately and the only
+   * correct thing to do with it is use it. */
+}
+
+/* Not while the reviewer is stepping the zoom themselves: pressing + should change the
+   size, not start a small animation toward it. */
+html[data-rv-zooming] #rv-page { transition: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  #rv-page { transition: none; }
+}
+
+/* Zoomed past the fit, the sheet is wider than the window — as a page is in any viewer.
+   Below it there is nothing to scroll. */
+body { overflow-x: auto; }
+
+/* WHILE FITTING, the sheet's width is LAYOUT, not script.
+ *
+ * This is the fix for the whole class of problem, and the diagram is the argument: every
+ * other box in the window gets its width from the layout, in the same pass as the change
+ * that caused it. The dark body follows the web view instantly because it IS the web view.
+ * The white sheet did not, because its width was 920 points scaled by a `zoom` that only
+ * JavaScript could set — and JavaScript runs in another process, a resize event later,
+ * measured at thirty-odd milliseconds. For those two frames the sheet was still sized for
+ * the width before last: wider than the view holding it, and therefore clipped, with the
+ * heading running under the pane.
+ *
+ * Fitting means filling, and filling is what `width: auto` does — in the same reflow
+ * WebKit already performs for the viewport change, with nothing to wait for. There is no
+ * moment at which the sheet is the wrong size, because there is no moment at which anyone
+ * has to be told the size.
+ *
+ * The measure is capped inside the sheet instead — for a document that brought no
+ * stylesheet of its own; see the rule below for why that qualification is load-bearing. */
+body.rv-fitting #rv-page {
+  width: auto;
+  max-width: none;
+  /* FIT WIDTH HAS TO MAKE THE DOCUMENT BIGGER, or it is not a zoom, it is a reflow.
+   *
+   * Filling at 100% type buys a wider window more ROOM and not a larger document: the same
+   * words at the same size with more space round them. That is not what Fit Width means in
+   * any other viewer, and not what the comment above this one says the sheet is for.
+   *
+   * `fitZoom()` in review.js has always computed the answer — the room available over the
+   * sheet's nominal 920 — and deliberately refused to apply it, because a zoom that SCRIPT
+   * sets arrives a process and a resize event later, which is the entire clipping saga.
+   * The answer here is that it does not have to be script: `zoom` takes a calc, and a calc
+   * over `100vw` is resolved in layout, in the same reflow as the viewport change it
+   * follows. Measured in WebKit before it was written: a 2560-point window computes
+   * 2.730435, which is (2560 − 48) / 920 exactly.
+   *
+   * `width: auto` STAYS, and that is the point of doing it this way. Inside a zoom the
+   * width resolves in the element's own coordinate space, so auto gives 920 CSS pixels —
+   * nominal, at every window size — and the zoom is what makes it fill. The sheet still
+   * gets its size from layout, so `rvHold` and the pane animation keep working on exactly
+   * the property they always worked on.
+   *
+   * One pixel short of exact, for the reason `fitZoom` is: fitting to the last pixel sits
+   * on the boundary where a horizontal scrollbar appears, and a scrollbar changes the
+   * width that decides whether there is a scrollbar. */
+  zoom: calc((100vw - 2 * var(--rv-gutter) - 1px) / 920px);
+}
+
+/* A document that brought no stylesheet is this app's to lay out, and the rule above is
+   not a layout for one: it caps the measure and leaves it against the left edge of a
+   sheet as wide as the window, so a wide window gives a column of text with an empty
+   half beside it. For a document with its own CSS that is the right restraint — its
+   margins are its own business and we are only stopping the lines running away. For one
+   with none, nobody is going to centre it but us.
+   So the whole document block is the measure, centred, and its children fill it — which
+   also puts tables and code back in line with the prose instead of spanning past it.
+   The measure matches what the fixed 920px sheet gives at 100%, so a plain document reads
+   the same whether it is fitted or zoomed.
+
+   Note what is NOT done here: capping `#rv-page` itself. A fitted sheet that stops growing
+   is a sheet already filling its window, and then "Fit Width" does nothing — the exact
+   fault the comment above this one was written about. The sheet still fills; only the
+   text inside it is laid out. */
+body.rv-fitting.rv-plain #rv-doc {
+  max-width: 54em;
+  margin: 0 auto;
+}
+body.rv-fitting.rv-plain #rv-doc > *,
+body.rv-fitting.rv-plain #rv-doc > table,
+body.rv-fitting.rv-plain #rv-doc > figure,
+body.rv-fitting.rv-plain #rv-doc > pre { max-width: none; }
+
+/* Background only. `color` used to live here too, and it silently beat the document's own
+   `body { color: … }` — the very trap this file already documents for `font` a few rules
+   below, arrived at from the other end. Specificity never came into it: `#rv-sheet` is an
+   ANCESTOR of the document, and a direct rule on an ancestor beats anything the document
+   inherits. So a spec that set its text colour on `body` had it thrown away, and only the
+   colours it happened to write per element survived — which is how a heading ended up
+   drawn in our ink on the document's own dark panel. The colour is at zero specificity on
+   `body` now, beside the type, for exactly the same reason. */
+#rv-sheet {
+  position: relative;
+  background: var(--rv-sheet);
+  border-radius: 3px;
+  box-shadow: 0 1px 3px var(--rv-shadow), 0 12px 32px var(--rv-shadow);
+  /* The right padding is wider than the left by exactly the gutter, so the text measure
+     stays centred in the white while the marks sit inside the page rather than floating
+     off its edge. A mark outside the sheet reads as belonging to the window. */
+  padding: 56px calc(48px + var(--rv-gutter-width)) 72px 48px;
+}
+
+#rv-doc { word-wrap: break-word; }
+
+/* The base font goes on `body`, at zero specificity, and NOT on `#rv-doc`.
+   A rule on `#rv-doc` would beat the document's own `body { font-family: … }` however
+   weak it was written — inheritance always loses to a direct rule on the element, so
+   specificity never even comes into it. Put here, a document that names its own typeface
+   is honoured and one that names none still gets something readable. */
+:where(body) {
+  font: 15px/1.65 -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  color: var(--rv-ink);
+}
+
+/* Sensible defaults for a document that brought no CSS of its own — a generator's plain
+   HTML should still read as a document.
+   Every selector below is wrapped in `:where()`, which contributes NOTHING to
+   specificity. Without it `#rv-doc h1` scores an id and beats any `h1` rule the document
+   wrote, so a spec sent in Georgia was being shown in the system sans — reviewing a
+   document that is not the one that was sent. The rule this file states is that the
+   document has the last word on how it looks; `:where` is what makes that true rather
+   than aspirational. */
+:where(#rv-doc h1) { font-size: 1.9em; line-height: 1.2; margin: 0 0 0.6em; font-weight: 700; }
+:where(#rv-doc h2) { font-size: 1.45em; line-height: 1.25; margin: 1.8em 0 0.5em; font-weight: 650; }
+:where(#rv-doc h3) { font-size: 1.15em; margin: 1.5em 0 0.4em; font-weight: 650; }
+:where(#rv-doc h4, #rv-doc h5, #rv-doc h6) { font-size: 1em; margin: 1.3em 0 0.3em; font-weight: 650; }
+:where(#rv-doc p, #rv-doc ul, #rv-doc ol, #rv-doc blockquote) { margin: 0 0 1em; }
+:where(#rv-doc li) { margin: 0.25em 0; }
+:where(#rv-doc blockquote) {
+  margin-left: 0; padding-left: 1em; border-left: 3px solid var(--rv-rule);
+  color: rgba(0, 0, 0, 0.66);
+}
+:where(#rv-doc pre) {
+  background: rgba(0, 0, 0, 0.045); padding: 0.9em 1.1em; border-radius: 5px;
+  overflow-x: auto; font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+}
+:where(#rv-doc code) { font: 0.9em ui-monospace, "SF Mono", Menlo, monospace; }
+:where(#rv-doc pre code) { font-size: 1em; }
+/* --- Task lists -----------------------------------------------------------
+   `- [x] …` reaches the page as an empty `<span class="rv-task">`, not as an
+   `<input>`: see `DocumentPrep.markTaskBoxes`. A platform checkbox is the one
+   element in a document that no stylesheet can reach — it ignores the document's
+   font, colour and size — and the sanitizer removes form controls anyway. So the
+   mark is drawn here, which is also what Vaelora does, so the two look alike.
+
+   NOT wrapped in `:where()`, unlike the defaults above. Those defer to the
+   document because the document might have an opinion about `h1`; nothing has an
+   opinion about `.rv-task`, which is a class this app invented and no document
+   uses. */
+#rv-doc ul > li:has(> .rv-task:first-child) {
+  list-style: none;
+  margin-left: -1.35em;
+}
+/* An ORDERED task item keeps its number. The author wrote that number and a tick
+   is no substitute for it — which is why this is scoped to `ul`. */
+#rv-doc .rv-task {
+  display: inline-block;
+  position: relative;
+  box-sizing: border-box;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.4em;
+  vertical-align: -0.1em;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.85;
+}
+/* The tick: two edges of a box, turned 45°. Nothing is typed, so the mark adds no
+   text to what the runtime reads and a quote across a task item is unchanged.
+
+   Artwork of your own goes here instead as a data URI, which the page's CSP allows
+   (`img-src data:`):
+
+     #rv-doc .rv-task-done::after {
+       left: 0; top: 0; width: 100%; height: 100%; border: 0; transform: none;
+       background: url("data:image/svg+xml,...") center / contain no-repeat;
+     }
+*/
+#rv-doc .rv-task-done::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.27em;
+  height: 0.52em;
+  border: solid currentColor;
+  border-width: 0 0.115em 0.115em 0;
+  transform: translate(-50%, -58%) rotate(45deg);
+}
+
+:where(#rv-doc table) { border-collapse: collapse; margin: 0 0 1em; width: 100%; }
+:where(#rv-doc th, #rv-doc td) {
+  border: 1px solid var(--rv-rule); padding: 0.45em 0.7em; text-align: left;
+  vertical-align: top;
+}
+:where(#rv-doc th) { background: rgba(0, 0, 0, 0.035); font-weight: 650; }
+:where(#rv-doc img) { max-width: 100%; height: auto; }
+:where(#rv-doc hr) { border: 0; border-top: 1px solid var(--rv-rule); margin: 2em 0; }
+
+/* An image that could not be read keeps its place, labelled. A figure that silently
+   disappears changes the document; a gap that names the file does not. */
+#rv-doc img.rv-missing, #rv-doc img[data-rv-missing] {
+  display: inline-block;
+  min-width: 180px; min-height: 90px;
+  border: 1px dashed var(--rv-rule);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.03);
+  position: relative;
+}
+#rv-doc img[data-rv-missing]::after {
+  content: "Image not available — " attr(data-rv-missing);
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 8px; text-align: center;
+  font: 11px/1.4 -apple-system, sans-serif; color: rgba(0, 0, 0, 0.45);
+}
+
+/* ------------------------------------------------------------------ selection */
+
+/* The reviewer's live selection, before it becomes an annotation. Distinct from every
+   annotation colour on purpose: what you are about to mark and what you have already
+   marked must never look like the same thing. */
+#rv-doc::selection, #rv-doc *::selection {
+  background: rgba(10, 108, 255, 0.22);
+}
+
+/* Region mode takes the I-beam away and stops the page offering to select: the drag is
+   drawing a box, and a cursor that says "text" while the pointer is drawing is a lie. */
+html[data-rv-tool="region"] #rv-sheet {
+  cursor: crosshair;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ---------------------------------------------------------------- highlights */
+
+/* Painted with the Custom Highlight API, so no element is inserted into the document and
+   no stored character offset moves. `::highlight()` accepts only these properties —
+   colour, background, decoration, shadow — which is enough, and is why the mark is a wash
+   plus an underline rather than a box. */
+::highlight(rv-change)   { background-color: rgba(224, 160, 58, 0.28);
+                           text-decoration: underline 1px rgba(224, 160, 58, 0.9); }
+::highlight(rv-insert)   { background-color: rgba(77, 158, 151, 0.26);
+                           text-decoration: underline 1px rgba(77, 158, 151, 0.9); }
+::highlight(rv-remove)   { background-color: rgba(212, 112, 79, 0.26);
+                           text-decoration: line-through 1px rgba(212, 112, 79, 0.95); }
+::highlight(rv-move)     { background-color: rgba(142, 123, 196, 0.26);
+                           text-decoration: underline 1px rgba(142, 123, 196, 0.9); }
+::highlight(rv-question) { background-color: rgba(91, 143, 196, 0.24);
+                           text-decoration: underline dotted 1px rgba(91, 143, 196, 0.95); }
+::highlight(rv-approve)  { background-color: rgba(138, 163, 91, 0.24); }
+::highlight(rv-note)     { background-color: rgba(154, 154, 158, 0.22); }
+/* The chosen one.
+   Deliberately NOT a colour of its own. It was one — the same blue as the selection —
+   and on screen you could not tell "the annotation you are reading" from "the words you
+   have just dragged over", which is the one distinction this file says must always hold.
+   So the current annotation keeps its intent's wash (the runtime puts its range in both
+   highlights) and this adds only a heavy ink underline on top. Nothing else on the page
+   draws one, and the live selection never does. */
+::highlight(rv-current)  { text-decoration: underline 2.5px rgba(0, 0, 0, 0.72); }
+
+/* ------------------------------------------------------------------- regions */
+
+#rv-regions {
+  position: absolute;
+  inset: 0;
+  /* The layer itself is invisible to the pointer so text under it stays selectable; the
+     boxes turn it back on for themselves alone. */
+  pointer-events: none;
+}
+
+.rv-region {
+  position: absolute;
+  border: 1.5px solid var(--rv-colour);
+  background: color-mix(in srgb, var(--rv-colour) 12%, transparent);
+  border-radius: 3px;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: box-shadow var(--rv-motion-hover-duration) var(--rv-motion-hover);
+}
+.rv-region:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--rv-colour) 22%, transparent); }
+.rv-region.current { box-shadow: 0 0 0 3px color-mix(in srgb, var(--rv-colour) 40%, transparent); }
+
+/* The box being dragged right now. Dashed, because it is not yet a thing — it becomes
+   solid when it becomes an annotation. */
+.rv-drag {
+  position: absolute;
+  border: 1.5px dashed rgba(10, 108, 255, 0.85);
+  background: rgba(10, 108, 255, 0.10);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------- gutter */
+
+#rv-gutter {
+  position: absolute;
+  top: 0; bottom: 0;
+  /* Inside the sheet's right padding, not against its edge. Flush right, the marks sat
+     half on the paper and half on the desk behind it, which reads as the window having
+     clipped them rather than as the page carrying them. */
+  right: 10px;
+  width: 40px;
+  /* The strip takes the pointer, so pressing anywhere on a mark's line chooses it — see
+     `pressGutter`. It has no text and nothing else in it, so there is nothing here for a
+     click to have been meant for. */
+  pointer-events: auto;
+}
+
+/* The mark itself is an SF Symbol rendered by the app and set as a background image.
+   It was drawn here in CSS once — a bordered circle with an inset shadow for the core and
+   an outer shadow for the chosen state — and it could not be made to look right: every
+   dimension became a fraction of a device pixel once the page's zoom was applied, and each
+   box snapped to the grid on its own. One image scaled as a unit cannot do that.
+
+   The ELEMENT is a slot; the image is drawn inside it, centred, at a fixed painted size.
+   That is what lets a mark grow under the pointer without moving anything beside it. */
+.rv-marker {
+  position: absolute;
+  background-repeat: no-repeat;
+  background-position: center;
+  box-sizing: border-box;
+  pointer-events: auto;
+  cursor: default;
+  z-index: 2;
+  transition: transform 90ms ease-out;
+}
+
+/* Pointing at a mark and CHOOSING one are different states, so they look different.
+   They were the same — both just grew the mark — and "which one am I looking at" then had
+   no answer at all: everything under the pointer looked chosen and the chosen one looked
+   like nothing once the pointer left it.
+   Hover grows it a little. Chosen draws a ring around it with a gap of page showing
+   through, which is the same shape a focus ring is and reads as "this one" without
+   drawing anything new on the page. Not a glow: a soft halo at these sizes is a smudge. */
+.rv-marker { border-radius: 50%; }
+.rv-marker:hover { transform: scale(1.12); }
+/* The chosen mark's ring is drawn INTO its image, not added here as a shadow.
+   It was a shadow, and the two would not line up: the element is a fraction of a point
+   wide once the zoom has divided it, the browser centres the background image in that, and
+   the shadow comes off the border box — three roundings, each snapping on its own, so the
+   ring sat up and to the left of the mark inside it. One image cannot be off-centre from
+   itself. See `AnnotationSymbols.composed`. */
+
+/* A mark being written, standing in the slot its mark will take. Not a target — the pane
+   has the keyboard, and the only two ways out of a draft are to write it or abandon it. */
+.rv-marker.pending {
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv-marker, .rv-region { transition: none; }
+}
+
+/* ------------------------------------------------------------ reading mode */
+
+/* What the page looks like when the document's own stylesheet has been set aside.
+   Not a theme — a fallback for documents that are hard to read as sent: a condensed face,
+   a full-bleed measure, colour on colour. The rules below are NOT wrapped in `:where()`,
+   unlike the defaults above, because in this mode there is deliberately nothing left to
+   lose to: the document's stylesheet is not on the page at all. */
+body.rv-reading #rv-doc {
+  font: 16px/1.7 "Iowan Old Style", "Palatino", Georgia, serif;
+  color: #1c1c1e;
+}
+body.rv-reading #rv-sheet { padding-top: 64px; }
+body.rv-reading #rv-doc h1,
+body.rv-reading #rv-doc h2,
+body.rv-reading #rv-doc h3,
+body.rv-reading #rv-doc h4,
+body.rv-reading #rv-doc h5,
+body.rv-reading #rv-doc h6 {
+  font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
+  letter-spacing: -0.012em;
+}
+/* A measure, rather than the full width of the sheet. Long lines are the single biggest
+   reason a generated document is tiring to read, and a reviewer reads every line of it. */
+body.rv-reading #rv-doc > * { max-width: 34em; }
+body.rv-reading #rv-doc > table,
+body.rv-reading #rv-doc > figure,
+body.rv-reading #rv-doc > pre { max-width: none; }

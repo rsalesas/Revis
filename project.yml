@@ -1,0 +1,148 @@
+name: Revis
+options:
+  bundleIdPrefix: app.revis
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: 42SSLNY3WS
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: true
+    ENABLE_USER_SCRIPT_SANDBOXING: false
+  debug:
+    CODE_SIGN_IDENTITY: "Sign to Run Locally"
+    CODE_SIGN_STYLE: Manual
+    PROVISIONING_PROFILE_SPECIFIER: ""
+packages:
+  # Apex is consumed as `ApexC`, the C library, and NOT as the `Apex` Swift wrapper.
+  #
+  # Two reasons, and the first is not a preference. The `Apex` product's targets carry
+  # `.unsafeFlags`, and SwiftPM refuses a package that does when it is depended on by
+  # version — resolution fails outright with "contains unsafe build flags". `ApexC` carries
+  # none, so it resolves normally.
+  #
+  # The second is that the Swift wrapper's `ApexOptions` exposes twelve flags and the C
+  # `apex_options` struct has about ninety. Every switch this app puts in front of a
+  # reviewer — tables, footnotes, smart typography, wiki links, definition lists — exists
+  # only in C. See `MarkdownRenderer`, which is the one place that boundary is crossed.
+  Apex:
+    url: https://github.com/ApexMarkdown/apex
+    from: 1.1.21
+targets:
+  Revis:
+    type: application
+    platform: macOS
+    sources:
+      - Revis
+    dependencies:
+      - package: Apex
+        product: ApexC
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.revis.app
+        GENERATE_INFOPLIST_FILE: false
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        DEVELOPMENT_ASSET_PATHS: '"Revis/Preview Content"'
+        ENABLE_PREVIEWS: true
+      configs:
+        debug:
+          # Un-sandboxed for local debug: ad-hoc signing plus the App Sandbox
+          # crashes WebKit's WebContent child, and this app is a web view.
+          CODE_SIGN_ENTITLEMENTS: Revis/Revis.Debug.entitlements
+        release:
+          CODE_SIGN_ENTITLEMENTS: Revis/Revis.DeveloperID.entitlements
+    info:
+      path: Revis/Info.plist
+      properties:
+        CFBundleName: Revis
+        CFBundleDisplayName: Revis
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        LSApplicationCategoryType: "public.app-category.productivity"
+        NSHumanReadableCopyright: "Copyright © 2026 Robert Salesas. Source-available under PolyForm Noncommercial 1.0.0."
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Revis Review
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - app.revis.review
+          # Read-only: opening one starts a review, and the review is what gets
+          # saved. Alternate rank so Revis never displaces the user's browser as
+          # the handler for every .html on the disk.
+          - CFBundleTypeName: HTML Document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.html
+          # Same treatment as HTML, and the same rank: opening a .md starts a review of it
+          # and the review is what gets saved. Revis is not anybody's Markdown editor.
+          - CFBundleTypeName: Markdown Document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - net.daringfireball.markdown
+        # Imported, not exported: the identifier is Daring Fireball's and is already
+        # declared by half the editors on the disk. Declaring it as ours would be a claim
+        # to own it, and Launch Services resolves the conflict by picking one at random.
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: net.daringfireball.markdown
+            UTTypeDescription: Markdown Document
+            UTTypeConformsTo:
+              - public.plain-text
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - md
+                - markdown
+                - mdown
+                - mkd
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: app.revis.review
+            UTTypeDescription: Revis Review
+            UTTypeConformsTo:
+              - public.json
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - revis
+    scheme:
+      testTargets:
+        - name: RevisTests
+          parallelizable: true
+      gatherCoverageData: true
+      coverageTargets:
+        - Revis
+    postBuildScripts:
+      - name: Stamp Version
+        script: |
+          PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+          if [ -f "${SRCROOT}/VERSION" ]; then
+            VERSION=$(cat "${SRCROOT}/VERSION" | tr -d '[:space:]')
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" "${PLIST}" 2>/dev/null || true
+          fi
+          BUILD=$(git -C "${SRCROOT}" rev-list --count HEAD 2>/dev/null || echo "1")
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD}" "${PLIST}" 2>/dev/null || true
+        basedOnDependencyAnalysis: false
+  RevisTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+        excludes:
+          - "Fixtures/**"
+    dependencies:
+      - target: Revis
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+        PRODUCT_BUNDLE_IDENTIFIER: app.revis.tests
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Revis.app/Contents/MacOS/Revis"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        ENABLE_TESTING_SEARCH_PATHS: true

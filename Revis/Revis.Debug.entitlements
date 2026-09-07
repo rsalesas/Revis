@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Debug builds run UN-sandboxed. Debug uses ad-hoc "Sign to Run Locally"
+	  signing, and WebKit's WebContent XPC child crashes under App Sandbox +
+	  ad-hoc signing. Release builds are Developer ID signed and DO enable the
+	  sandbox, where WebKit works normally.
+	-->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>
