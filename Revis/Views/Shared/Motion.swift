@@ -112,11 +112,3 @@ extension View {
 func withMotion<R>(_ token: Motion, _ body: () throws -> R) rethrows -> R {
     try withAnimation(token.resolved(Motion.systemReduceMotion), body)
 }
-
-/// How a row's extra controls arrive when it is chosen: a fade with a little height, so
-/// the list does not jump.
-extension View {
-    func revealedRowTransition() -> some View {
-        transition(.opacity.combined(with: .move(edge: .top)))
-    }
-}

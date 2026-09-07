@@ -37,56 +37,6 @@ enum ReviewFixtures {
             .trimmingCharacters(in: .whitespaces)
     }
 
-    /// An anchor built the way the runtime builds one: the exact quote, plus up to 64
-    /// characters either side, trimmed only on the outer edge.
-    ///
-    /// **`within` is the block's own text, and the offsets are measured against it.** They
-    /// used to be measured against the whole document, which is wrong and was invisible:
-    /// `positionAt` in review.js walks the text nodes INSIDE the block it is given, so a
-    /// document-wide offset is out of range, and it clamps to the end of the block rather
-    /// than failing. Every highlight became an empty range sitting at the end of its
-    /// paragraph — nothing thrown, nothing logged, and in a short document just close
-    /// enough to the right place to look like a rounding error. Passing the block's text
-    /// makes the offsets mean what the runtime will read them as.
-    static func anchor(_ quote: String, occurrence: Int = 0, block: Int,
-                       path: String, role: String = "paragraph",
-                       within: String? = nil,
-                       in text: String) -> Anchor {
-        var searchFrom = text.startIndex
-        var found: Range<String.Index>?
-        for _ in 0...occurrence {
-            guard let hit = text.range(of: quote, range: searchFrom..<text.endIndex) else {
-                break
-            }
-            found = hit
-            searchFrom = hit.upperBound
-        }
-        guard let range = found else {
-            Issue.record("the fixture does not contain \"\(quote)\"")
-            return Anchor(blocks: [block], path: path, role: role, quote: quote,
-                          prefix: "", suffix: "", start: -1, end: -1, rect: nil)
-        }
-        // Where the quote sits inside its own block. Falling back to the document-wide
-        // position when no block text is given keeps old call sites compiling, but every
-        // anchor that will be OPENED should pass `within`.
-        let offset = within.flatMap { block in
-            block.range(of: quote).map { block.distance(from: block.startIndex,
-                                                        to: $0.lowerBound) }
-        } ?? text.distance(from: text.startIndex, to: range.lowerBound)
-        let head = text.index(range.lowerBound, offsetBy: -64,
-                              limitedBy: text.startIndex) ?? text.startIndex
-        let tail = text.index(range.upperBound, offsetBy: 64,
-                              limitedBy: text.endIndex) ?? text.endIndex
-        return Anchor(
-            blocks: [block], path: path, role: role, quote: quote,
-            prefix: String(text[head..<range.lowerBound]).replacingOccurrences(
-                of: "^\\s+", with: "", options: .regularExpression),
-            suffix: String(text[range.upperBound..<tail]).replacingOccurrences(
-                of: "\\s+$", with: "", options: .regularExpression),
-            start: offset,
-            end: offset + quote.count,
-            rect: nil)
-    }
 }
 
 /// The document as the runtime will index it.
