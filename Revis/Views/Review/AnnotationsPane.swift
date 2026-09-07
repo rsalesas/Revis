@@ -404,7 +404,14 @@ struct AnnotationsPane: View {
             Text(annotation.author.isEmpty ? "Unsigned" : annotation.author)
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
-            Spacer()
+                // One line, truncated. A long name wrapping to two makes the row taller
+                // and the buttons beside it shorter, which is how "Resolve" came to be
+                // rendered as "Resol…" — the byline is the part that can afford to lose
+                // characters here.
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(-1)
+            Spacer(minLength: 4)
             // The transition belongs to the CONTROLS, which really are inserted and
             // removed. It used to wrap the whole footer through a modifier that branched
             // on `selected` — and an `if`/`else` in a view builder gives the two branches
@@ -444,17 +451,27 @@ struct AnnotationsPane: View {
                            + " to act on it")
                       + ". This cannot be undone.")
             }
-            Divider().frame(height: 11)
         }
-        // Replying is a RESPONSE, so it sits with the verdicts and Resolve rather than
-        // with the controls `canEdit` governs — you may not rewrite what somebody asked
-        // for, and you may always say something about it.
-        Button("Reply") {
+        // Replying is a RESPONSE — the same category as a verdict, and not one `canEdit`
+        // governs: you may not rewrite what somebody asked for, and you may always say
+        // something about it. So it sits with the verdicts, and wears a glyph as they do.
+        //
+        // An icon rather than a word because the row cannot afford one: at 271 points of
+        // card, "Reply" and "Resolve" together left "Resolve" rendering as "Resol…". The
+        // three responses being glyphs and the two decisions about the WORK being words is
+        // a division worth having anyway.
+        Button {
             replyText = ""
             withMotion(.reveal) { model.beginReply(to: annotation.id) }
+        } label: {
+            Image(systemName: "arrowshape.turn.up.left")
         }
+        .foregroundStyle(.secondary)
         .help("Say something back about this. Anyone can reply, including on an annotation"
               + " that has been decided.")
+
+        Divider().frame(height: 11)
+
         // Resolving is open to anyone: it says the thing was dealt with, which is a fact
         // about the work rather than a change to what was said.
         if annotation.status == .open {
