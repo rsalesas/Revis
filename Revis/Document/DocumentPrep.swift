@@ -84,13 +84,57 @@ enum DocumentPrep {
     /// nothing added and nothing skipped.
     static func prepare(markdown: String, baseURL: URL?,
                         options: MarkdownOptions) -> PreparedDocument {
-        let html = MarkdownRenderer.html(for: markdown, options: options)
+        let html = markTaskBoxes(in: MarkdownRenderer.html(for: markdown, options: options))
         var document = prepare(html: html, baseURL: baseURL)
         // A rendered fragment has no `<title>`; its name is its first heading, which is
         // what a reader would call it too.
         document.title = document.title ?? firstHeading(in: document.body)
         document.markdown = MarkdownSource(text: markdown, options: options)
         return document
+    }
+
+    /// Turn a task list's checkboxes into marks the stylesheet draws.
+    ///
+    /// `- [x] …` renders as `<input type="checkbox" checked disabled>`, and the sanitizer
+    /// removes every form control — so a task list arrived with its text and no boxes at
+    /// all, and the provenance report said "114 form controls removed" about a document
+    /// containing no form. The content was being lost to a rule aimed at something else.
+    ///
+    /// **Not fixed by letting the input through.** The sanitizer's rule is absolute on
+    /// purpose and is the last file in the app that should grow an exception; and a
+    /// platform checkbox is the wrong thing to draw anyway — it ignores the document's
+    /// font, colour and size, which is the reason Vaelora does not use one either. So the
+    /// input is replaced BEFORE the sanitizer ever sees it, with an empty span carrying
+    /// the state as a class. Nothing about the sanitizer changes, and no form control
+    /// reaches it.
+    ///
+    /// Only a `disabled` checkbox is converted. That is what a task list produces, and it
+    /// means a live `<input>` arriving in a document's raw HTML is still a form control
+    /// and still removed — the conversion cannot become a way in.
+    ///
+    /// The span is empty on purpose: the class carries the state, so nothing new lands in
+    /// the text the runtime reads. A quote across a task item is the same string it was.
+    static func markTaskBoxes(in html: String) -> String {
+        guard html.range(of: "<input", options: .caseInsensitive) != nil else { return html }
+        var out = ""
+        var rest = Substring(html)
+        while let start = rest.range(of: "<input", options: .caseInsensitive) {
+            out += rest[rest.startIndex..<start.lowerBound]
+            guard let end = rest[start.upperBound...].firstIndex(of: ">") else {
+                out += rest[start.lowerBound...]
+                return out
+            }
+            let tag = String(rest[start.lowerBound...end])
+            let type = attribute("type", in: tag)?.lowercased()
+            if type == "checkbox", tag.range(of: "disabled", options: .caseInsensitive) != nil {
+                let checked = tag.range(of: "checked", options: .caseInsensitive) != nil
+                out += "<span class=\"rv-task\(checked ? " rv-task-done" : "")\"></span>"
+            } else {
+                out += tag   // left for the sanitizer, which will take it out
+            }
+            rest = rest[rest.index(after: end)...]
+        }
+        return out + rest
     }
 
     /// The text of the first `<h1>`, for a document that has no title of its own.

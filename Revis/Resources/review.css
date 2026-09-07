@@ -180,6 +180,58 @@ body.rv-fitting #rv-doc > pre { max-width: none; }
 }
 :where(#rv-doc code) { font: 0.9em ui-monospace, "SF Mono", Menlo, monospace; }
 :where(#rv-doc pre code) { font-size: 1em; }
+/* --- Task lists -----------------------------------------------------------
+   `- [x] …` reaches the page as an empty `<span class="rv-task">`, not as an
+   `<input>`: see `DocumentPrep.markTaskBoxes`. A platform checkbox is the one
+   element in a document that no stylesheet can reach — it ignores the document's
+   font, colour and size — and the sanitizer removes form controls anyway. So the
+   mark is drawn here, which is also what Vaelora does, so the two look alike.
+
+   NOT wrapped in `:where()`, unlike the defaults above. Those defer to the
+   document because the document might have an opinion about `h1`; nothing has an
+   opinion about `.rv-task`, which is a class this app invented and no document
+   uses. */
+#rv-doc ul > li:has(> .rv-task:first-child) {
+  list-style: none;
+  margin-left: -1.35em;
+}
+/* An ORDERED task item keeps its number. The author wrote that number and a tick
+   is no substitute for it — which is why this is scoped to `ul`. */
+#rv-doc .rv-task {
+  display: inline-block;
+  position: relative;
+  box-sizing: border-box;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.4em;
+  vertical-align: -0.1em;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.85;
+}
+/* The tick: two edges of a box, turned 45°. Nothing is typed, so the mark adds no
+   text to what the runtime reads and a quote across a task item is unchanged.
+
+   Artwork of your own goes here instead as a data URI, which the page's CSP allows
+   (`img-src data:`):
+
+     #rv-doc .rv-task-done::after {
+       left: 0; top: 0; width: 100%; height: 100%; border: 0; transform: none;
+       background: url("data:image/svg+xml,...") center / contain no-repeat;
+     }
+*/
+#rv-doc .rv-task-done::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.27em;
+  height: 0.52em;
+  border: solid currentColor;
+  border-width: 0 0.115em 0.115em 0;
+  transform: translate(-50%, -58%) rotate(45deg);
+}
+
 :where(#rv-doc table) { border-collapse: collapse; margin: 0 0 1em; width: 100%; }
 :where(#rv-doc th, #rv-doc td) {
   border: 1px solid var(--rv-rule); padding: 0.45em 0.7em; text-align: left;

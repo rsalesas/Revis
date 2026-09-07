@@ -141,10 +141,11 @@ struct InspectorView: View {
                         // about the document, and a reviewer who has used the switch on
                         // another one is owed the reason it is missing on this.
                         Text(model.markdownOptions == nil
-                             ? "This document brought no stylesheet, so it is drawn in the"
-                               + " reading style. There is nothing of its own to show it in."
-                             : "Markdown carries no styling of its own, so it is drawn in the"
-                               + " reading style. How it is READ is on the Markdown tab.")
+                             ? "This document brought no stylesheet of its own, so it is"
+                               + " drawn in Revis's defaults. There is no second appearance"
+                               + " to switch to."
+                             : "Markdown carries no styling of its own, so it is drawn in"
+                               + " Revis's defaults. How it is READ is on the Markdown tab.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

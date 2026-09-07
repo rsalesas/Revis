@@ -320,6 +320,35 @@ struct MarkdownTests {
         #expect(markdown.contains("> Hello there"))
     }
 
+    /// A task list keeps its boxes. They used to be `<input>` elements, which the
+    /// sanitizer removes along with every other form control — so the list arrived as
+    /// unmarked text and the report claimed a document with no form in it had had a
+    /// hundred form controls taken out.
+    @Test func aTaskListKeepsItsBoxesWithoutUsingAFormControl() {
+        let prepared = DocumentPrep.prepare(
+            markdown: "- [x] Erasure honoured\n- [ ] Portability pending\n",
+            baseURL: nil, options: .default)
+
+        #expect(!prepared.body.lowercased().contains("<input"))
+        #expect(prepared.body.contains("rv-task rv-task-done"))
+        #expect(prepared.body.contains("class=\"rv-task\"></span>"))
+        #expect(prepared.report.interactive == 0, "nothing should have been removed")
+        // The mark carries no text, so a quote over a task item is what it always was.
+        #expect(prepared.body.contains("Erasure honoured"))
+    }
+
+    /// The conversion must not become a way past the sanitizer: only the inert checkbox a
+    /// task list produces is converted, and anything a document brought itself is still a
+    /// form control.
+    @Test func aLiveInputIsStillRemoved() {
+        let live = DocumentPrep.markTaskBoxes(in: "<p><input type=\"checkbox\"> pick me</p>")
+        #expect(live.contains("<input"), "a checkbox that is not disabled is not a task box")
+        #expect(DocumentPrep.prepare(html: live, baseURL: nil).report.interactive == 1)
+
+        let text = DocumentPrep.markTaskBoxes(in: "<p><input type=\"text\" disabled></p>")
+        #expect(text.contains("<input"))
+    }
+
     // MARK: - What the renderer is not allowed to do
 
     /// Not a preference. A document that can pull in another file is a document that can
