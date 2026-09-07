@@ -117,24 +117,38 @@ struct InspectorView: View {
                 }
 
                 group("Display") {
-                    // Here as well as in the status bar, and that is not a duplicate: the
-                    // bar is where you reach for it while reading, and this is where it is
-                    // explained. A one-word control with no room for a sentence beside it
-                    // cannot say what it costs you.
-                    Toggle("Use the document's own stylesheet",
-                           isOn: $model.useDocumentStyle)
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .font(.system(size: 11))
-                    Text(model.useDocumentStyle
-                         ? "The document is drawn exactly as it was sent, which is what you"
-                           + " are reviewing."
-                         : "The document's stylesheet has been set aside for a plain reading"
-                           + " style. What you see is NOT how it looks — turn this back on"
-                           + " before judging its appearance.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(model.useDocumentStyle ? .secondary : .primary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if model.hasDocumentStyle {
+                        // Here as well as in the status bar, and that is not a duplicate:
+                        // the bar is where you reach for it while reading, and this is
+                        // where it is explained. A one-word control with no room for a
+                        // sentence beside it cannot say what it costs you.
+                        SettingToggle(title: "Use the document's own stylesheet",
+                                      isOn: $model.useDocumentStyle)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .font(.system(size: 11))
+                        Text(model.useDocumentStyle
+                             ? "The document is drawn exactly as it was sent, which is what"
+                               + " you are reviewing."
+                             : "The document's stylesheet has been set aside for a plain"
+                               + " reading style. What you see is NOT how it looks — turn"
+                               + " this back on before judging its appearance.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(model.useDocumentStyle ? .secondary : .primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        // Said rather than left blank. "There is no switch here" is a fact
+                        // about the document, and a reviewer who has used the switch on
+                        // another one is owed the reason it is missing on this.
+                        Text(model.markdownOptions == nil
+                             ? "This document brought no stylesheet, so it is drawn in the"
+                               + " reading style. There is nothing of its own to show it in."
+                             : "Markdown carries no styling of its own, so it is drawn in the"
+                               + " reading style. How it is READ is on the Markdown tab.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 group("Made safe") {

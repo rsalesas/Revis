@@ -192,6 +192,25 @@ final class ReviewModel: ObservableObject {
     /// The settings this document was rendered under, if it is a Markdown one.
     var markdownOptions: MarkdownOptions? { prepared.markdown?.options }
 
+    /// Whether the document brought a stylesheet of its own.
+    ///
+    /// The switch between the document's appearance and a plain reading style is only a
+    /// question where the document HAS an appearance. Markdown does not: a `.md` is text,
+    /// it is this app that decides what it looks like, and offering to show it "as it was
+    /// sent" is offering something that does not exist. Asked of the stylesheet rather
+    /// than of the file's kind, because the same is true of an HTML document that arrived
+    /// with no `<style>` in it — and because a Markdown document CAN bring one, in a raw
+    /// HTML block, at which point the question is real again.
+    ///
+    /// With no stylesheet the page is drawn in the reading style, which is the only one of
+    /// the two that means anything here. Leaving `useDocumentStyle` on and injecting an
+    /// empty stylesheet was the previous behaviour and was the worst of both: no styling
+    /// from the document, and the chrome's reading defaults withheld on the grounds of
+    /// deferring to a document that had no opinion.
+    var hasDocumentStyle: Bool {
+        !prepared.css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// Whether re-reading would move the marks already on the page.
     ///
     /// Re-rendering under different settings makes a different document: a table that was
@@ -227,7 +246,7 @@ final class ReviewModel: ObservableObject {
         guard !prepared.body.isEmpty else { pageHTML = ""; return }
         pageHTML = DocumentShell.page(
             for: prepared, chromeCSS: DocumentShell.bundleString(named: "review", ext: "css"),
-            useDocumentCSS: useDocumentStyle)
+            useDocumentCSS: useDocumentStyle && hasDocumentStyle)
     }
 
     // MARK: - Zoom

@@ -97,6 +97,10 @@ struct RevisCommands: Commands {
                 withMotion(.reveal) { review.useDocumentStyle.toggle() }
             }
             .keyboardShortcut("y", modifiers: [.command, .shift])
+            // Disabled rather than hidden: a menu whose items move about depending on the
+            // document is one nobody learns. Greyed out, the shortcut still tells you the
+            // command exists and this document has no use for it.
+            .disabled(review?.hasDocumentStyle != true)
             Divider()
         }
 

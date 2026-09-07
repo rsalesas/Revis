@@ -39,17 +39,22 @@ struct StatusBar: View {
             } else {
                 Text(count(model.blockCount, "block"))
                     .monospacedDigit()
+                // Both of these are a summary of something the inspector says in full, so
+                // both go there. A count of what was taken out of the document, with no way
+                // to find out WHAT, is the app saying "I changed this and I am not telling
+                // you" — and the panel that answers it was two clicks away behind a pane
+                // that is closed by default.
                 if !model.prepared.report.isClean {
                     Divider().frame(height: 10)
-                    Label("\(removedCount) removed", systemImage: "checkmark.shield")
-                        .labelStyle(.titleAndIcon)
-                        .help(removedSummary)
+                    provenanceButton("\(removedCount) removed", symbol: "checkmark.shield",
+                                     help: removedSummary)
                 }
                 if !model.prepared.missingImages.isEmpty {
                     Divider().frame(height: 10)
-                    Label(count(model.prepared.missingImages.count, "image") + " missing",
-                          systemImage: "photo.badge.exclamationmark")
-                        .help(model.prepared.missingImages.prefix(6).joined(separator: "\n"))
+                    provenanceButton(
+                        count(model.prepared.missingImages.count, "image") + " missing",
+                        symbol: "photo.badge.exclamationmark",
+                        help: model.prepared.missingImages.prefix(6).joined(separator: "\n"))
                 }
             }
         }
@@ -69,6 +74,26 @@ struct StatusBar: View {
         "\(number) \(noun)\(number == 1 ? "" : "s")"
     }
 
+    /// A count that takes you to the thing it counts.
+    ///
+    /// Opens the inspector if it is shut — through `setPane`, like every other route to a
+    /// pane, so the document gives the room up before the pane takes it rather than being
+    /// clipped for the length of the animation. See the note in CLAUDE.md.
+    private func provenanceButton(_ title: String, symbol: String, help: String) -> some View {
+        Button {
+            withMotion(.panel) {
+                model.inspectorTab = .document
+                model.setPane(.outline, open: true)
+            }
+        } label: {
+            Label(title, systemImage: symbol)
+                .labelStyle(.titleAndIcon)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help + "\n\nClick to see the full report.")
+    }
+
     private var removedCount: Int {
         model.prepared.report.lines.reduce(0) { $0 + $1.count }
     }
@@ -84,7 +109,16 @@ struct StatusBar: View {
     /// One control, two states. A separate "reading style" button and "document style"
     /// button would be two ways of saying one thing, and the reviewer would have to read
     /// both to work out which was on.
-    private var styleToggle: some View {
+    @ViewBuilder private var styleToggle: some View {
+        // Only where the document has a stylesheet to be faithful to — see
+        // `ReviewModel.hasDocumentStyle`. A control that switches between one appearance
+        // and the same appearance is worse than no control.
+        if model.hasDocumentStyle {
+            styleButton
+        }
+    }
+
+    private var styleButton: some View {
         Button {
             withMotion(.reveal) { model.useDocumentStyle.toggle() }
         } label: {
