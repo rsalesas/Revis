@@ -29,6 +29,11 @@ enum AnnotationSymbols {
     /// and it costs nothing to say.
     static let pending = "circle.dashed"
 
+    /// Saying something back. Not drawn on the page — a thread is read in the pane — but it
+    /// lives here with the others so there is one list of the symbol names this app relies
+    /// on, and one test that they all still resolve.
+    static let reply = "arrowshape.turn.up.left"
+
     /// The two colours a hollow mark is drawn in.
     static func palette(for hex: String) -> [NSColor] {
         let colour = NSColor(hex: hex)

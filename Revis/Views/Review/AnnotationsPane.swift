@@ -480,7 +480,7 @@ struct AnnotationsPane: View {
             replyText = ""
             withMotion(.reveal) { model.beginReply(to: annotation.id) }
         } label: {
-            Image(systemName: "arrowshape.turn.up.left")
+            Image(systemName: AnnotationSymbols.reply)
         }
         .foregroundStyle(.secondary)
         .help("Say something back about this. Anyone can reply, including on an annotation"
@@ -490,12 +490,30 @@ struct AnnotationsPane: View {
 
         // Resolving is open to anyone: it says the thing was dealt with, which is a fact
         // about the work rather than a change to what was said.
+        //
+        // The glyphs are the app's OWN, not a fresh pair chosen for a button: a resolved
+        // annotation is drawn in the margin as a hollow ring and an open one as a filled
+        // disc, so the control that resolves it shows what the mark is about to become.
+        // Taken from `AnnotationSymbols` rather than spelled again here, because two copies
+        // of a symbol name is two chances for the button and the mark to stop agreeing —
+        // and NOT a checkmark, which already means Approve two controls to the left.
         if annotation.status == .open {
-            Button("Resolve") { model.resolve(annotation.id) }
-                .help("Mark as dealt with. It stays in the review, and the export lists it"
-                      + " separately.")
+            Button {
+                model.resolve(annotation.id)
+            } label: {
+                Image(systemName: AnnotationSymbols.hollow)
+            }
+            .foregroundStyle(.secondary)
+            .help("Mark as dealt with. It stays in the review, and the export lists it"
+                  + " separately.")
         } else {
-            Button("Reopen") { model.reopen(annotation.id) }
+            Button {
+                model.reopen(annotation.id)
+            } label: {
+                Image(systemName: AnnotationSymbols.disc)
+            }
+            .foregroundStyle(.secondary)
+            .help("Put this back among the outstanding annotations.")
         }
         Button(role: .destructive) { model.delete(annotation.id) } label: {
             Image(systemName: "trash")
