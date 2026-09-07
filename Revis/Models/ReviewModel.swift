@@ -215,9 +215,7 @@ final class ReviewModel: ObservableObject {
     /// defaults for a document that brought no CSS of its own". So a document with no
     /// stylesheet is drawn in those, always, and the switch is not offered — there being
     /// no second thing to switch to.
-    var hasDocumentStyle: Bool {
-        !prepared.css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
+    var hasDocumentStyle: Bool { prepared.hasStyle }
 
     /// Whether re-reading would move the marks already on the page.
     ///

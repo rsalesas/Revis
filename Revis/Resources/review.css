@@ -133,6 +133,30 @@ body.rv-fitting #rv-doc > table,
 body.rv-fitting #rv-doc > figure,
 body.rv-fitting #rv-doc > pre { max-width: none; }
 
+/* A document that brought no stylesheet is this app's to lay out, and the rule above is
+   not a layout for one: it caps the measure and leaves it against the left edge of a
+   sheet as wide as the window, so a wide window gives a column of text with an empty
+   half beside it. For a document with its own CSS that is the right restraint — its
+   margins are its own business and we are only stopping the lines running away. For one
+   with none, nobody is going to centre it but us.
+   So the whole document block is the measure, centred, and its children fill it — which
+   also puts tables and code back in line with the prose instead of spanning past it.
+   The measure matches what the fixed 920px sheet gives at 100%, so a plain document reads
+   the same whether it is fitted or zoomed.
+
+   Note what is NOT done here: capping `#rv-page` itself. A fitted sheet that stops growing
+   is a sheet already filling its window, and then "Fit Width" does nothing — the exact
+   fault the comment above this one was written about. The sheet still fills; only the
+   text inside it is laid out. */
+body.rv-fitting.rv-plain #rv-doc {
+  max-width: 54em;
+  margin: 0 auto;
+}
+body.rv-fitting.rv-plain #rv-doc > *,
+body.rv-fitting.rv-plain #rv-doc > table,
+body.rv-fitting.rv-plain #rv-doc > figure,
+body.rv-fitting.rv-plain #rv-doc > pre { max-width: none; }
+
 #rv-sheet {
   position: relative;
   background: var(--rv-sheet);

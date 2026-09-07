@@ -71,7 +71,7 @@ enum DocumentShell {
         \(useDocumentCSS ? prepared.css : "")
         </style>
         </head>
-        <body class="\(useDocumentCSS ? "" : "rv-reading")">
+        <body class="\(bodyClass(for: prepared, useDocumentCSS: useDocumentCSS))">
         <div id="rv-page">
           <div id="rv-sheet">
             <div id="rv-doc">
@@ -84,6 +84,18 @@ enum DocumentShell {
         </body>
         </html>
         """
+    }
+
+    /// Which of the three the page is in.
+    ///
+    /// `rv-reading` is the rescue — a document whose own CSS is unreadable, set aside.
+    /// `rv-plain` is a document that brought no CSS at all, which is a different situation
+    /// and wants a different answer: there is nothing to set aside and nothing to defer to,
+    /// so this app is laying the document out and should lay it out like a document.
+    private static func bodyClass(for prepared: PreparedDocument,
+                                  useDocumentCSS: Bool) -> String {
+        if !useDocumentCSS { return "rv-reading" }
+        return prepared.hasStyle ? "" : "rv-plain"
     }
 
     private static func escaped(_ text: String) -> String {

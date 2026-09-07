@@ -36,6 +36,15 @@ struct PreparedDocument: Codable, Equatable, Sendable {
     /// of its own JSON. The same trap is written up at length in `Annotation.init(from:)`.
     var markdown: MarkdownSource?
 
+    /// Whether the document brought a stylesheet of its own.
+    ///
+    /// Asked in two places — the model, to decide whether the appearance switch is a real
+    /// question, and the shell, to decide whether this app is the one laying the document
+    /// out. One property so the two cannot answer differently.
+    var hasStyle: Bool {
+        !css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     static let empty = PreparedDocument(body: "", css: "", title: nil,
                                         report: SanitizationReport(), missingImages: [],
                                         markdown: nil)
