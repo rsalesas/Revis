@@ -4,7 +4,7 @@ A macOS reviewer for documents that came out of a language model — a specifica
 draft, a report — and a way to mark them up so that the same model can act on what you
 said. HTML or Markdown.
 
-It is the other half of [Vaelora](../Vaelora): Vaelora writes a document, Revis reviews
+It is the other half of [Vaelora](https://vaelora.app): Vaelora writes a document, Revis reviews
 one. There is no editor here. A document opens straight into review mode, rendered exactly
 as it was sent, and everything you do to it is an annotation.
 
