@@ -79,6 +79,10 @@ final class ReviewModel: ObservableObject {
     /// animation clipped against the pane taking the room.
     @Published private(set) var pageHold: CGFloat = 0
     @Published private(set) var pageHoldToken = 0
+    /// Which card has a reply composer open, and a token so pressing Reply on the card that
+    /// already has one still refocuses the field.
+    @Published var replyTarget: UUID?
+    @Published private(set) var replyToken = 0
     @Published var inspectorTab: InspectorTab = .outline
     /// Whether the reviewer has text selected in the document. Reported by the runtime, so
     /// Add can be disabled rather than offered and then refused.
@@ -410,6 +414,56 @@ final class ReviewModel: ObservableObject {
         guard let index = index(of: id) else { return }
         annotations[index].decide(verdict, by: author)
     }
+
+    // MARK: - Replying
+
+    /// Say something back about an annotation.
+    ///
+    /// Gated by neither authorship nor a verdict, and both omissions are deliberate. The
+    /// rule that stops you editing somebody else's annotation exists so that what they
+    /// asked for stays what they asked for; a reply does not touch it. And a verdict
+    /// settles what is being ASKED, not whether anyone may remark on it — "declined
+    /// because the worker cannot run that often" is exactly the sort of thing that ought to
+    /// end up on a declined item. See `Annotation.isEditable`, which already says that
+    /// resolving and deciding are responses and that responding is the point.
+    func addReply(_ text: String, to id: UUID) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let index = index(of: id) else { return }
+        annotations[index].replies.append(Reply(author: author, text: text))
+        replyTarget = nil
+    }
+
+    /// Take back something you said. Only your own, and only ever by removing it whole.
+    ///
+    /// There is no edit. A thread whose earlier remarks can be quietly rewritten is not a
+    /// record of a conversation, it is a record of whoever spoke last — and somebody may
+    /// already have answered the version that is being changed.
+    func deleteReply(_ replyID: UUID, from id: UUID) {
+        guard let index = index(of: id) else { return }
+        annotations[index].replies.removeAll {
+            $0.id == replyID && canDelete($0)
+        }
+    }
+
+    /// Whose reply this is to withdraw. Same shape as `Annotation.isEditable` — your own,
+    /// or one nobody signed — but asked of the REPLY's author, not the annotation's: a
+    /// remark under somebody else's request is still yours.
+    func canDelete(_ reply: Reply) -> Bool {
+        reply.author.isEmpty
+            || reply.author.compare(author, options: .caseInsensitive) == .orderedSame
+    }
+
+    /// Open the composer on a card. The token is the idiom used by drafts and reveals: a
+    /// bare id does not change when you press Reply twice on the same card, so nothing
+    /// would refocus the field.
+    func beginReply(to id: UUID) {
+        replyToken &+= 1
+        replyTarget = id
+        selectedID = id
+        setPane(.annotations, open: true)
+    }
+
+    func cancelReply() { replyTarget = nil }
 
     /// Deleting is editing, and follows the same rule: another reviewer's annotation is
     /// not yours to remove, and a decided one is not anybody's.
