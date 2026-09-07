@@ -109,6 +109,152 @@ struct LargeDocumentTests {
         let restored = try JSONDecoder.revis.decode(ReviewFile.self, from: data)
         #expect(restored == original)
     }
+
+    // MARK: - Markdown
+
+    /// Write the large Markdown document, and check the map still holds at that size.
+    ///
+    /// The four-page fixture proves the shadow can read one of everything. This proves
+    /// something the small one cannot: that it stays in step over a hundred and thirty-five
+    /// thousand words of it, where a single dropped character anywhere shifts every offset
+    /// after it and the symptom is one quote in the back half landing on the wrong sentence.
+    @Test func writeALargeMarkdownDocument() throws {
+        let document = LargeDocument.markdown(words: Self.targetWords)
+
+        let directory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Samples")
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        try document.text.write(to: directory.appendingPathComponent("large-spec.md"),
+                                atomically: true, encoding: .utf8)
+
+        let options = MarkdownOptions.default
+        let html = MarkdownRenderer.html(for: document.text, options: options)
+        let shadow = MarkdownShadow.build(document.text, options: options)
+
+        print("""
+
+        large-spec.md    \(document.text.count / 1024) KB, \(document.words) words, \
+        \(document.headings) headings, \(document.footnotes) footnotes
+
+        """)
+
+        #expect(document.words >= Self.targetWords)
+        #expect(document.footnotes > 50, "a fixture with few footnotes proves little")
+
+        // The assertion the whole map rests on, at size. `↩` is the renderer's own
+        // back-link and is deliberately not in the shadow — see `MarkdownShadow`.
+        let rendered = MarkdownTests.flatten(MarkdownTests.visibleText(html))
+            .replacingOccurrences(of: " ↩", with: "")
+        let shadowed = MarkdownTests.flatten(
+            shadow.text.replacingOccurrences(of: "\n", with: " "))
+        #expect(rendered == shadowed, divergence(rendered, shadowed))
+
+        // Quotes taken off the RENDERED page, the way a reviewer takes them, found in the
+        // source. Sampled across the whole document rather than from the front, because an
+        // offset that drifts drifts progressively.
+        let paragraphs = renderedParagraphs(html)
+        #expect(paragraphs.count > 500)
+        var located = 0
+        var checked = 0
+        for index in stride(from: 3, to: paragraphs.count, by: max(1, paragraphs.count / 40)) {
+            let words = paragraphs[index].split(separator: " ")
+            guard words.count > 16 else { continue }
+            let quote = words[4..<12].joined(separator: " ")
+            checked += 1
+            let anchor = Anchor(blocks: [index], path: "", role: "paragraph", quote: quote,
+                                prefix: words[0..<4].joined(separator: " "),
+                                suffix: words[12...].prefix(6).joined(separator: " "),
+                                start: 0, end: quote.count, rect: nil)
+            guard let found = MarkdownLocator.locate(anchor, in: shadow) else { continue }
+            located += 1
+            // The point of the exercise: what comes back is the FILE's spelling, and the
+            // words on the page are still in it once the markup is taken out.
+            #expect(MarkdownTests.flatten(stripMarkup(found.sourceQuote)) == quote,
+                    "source quote does not read as the page: \(found.sourceQuote)")
+        }
+        #expect(checked > 20)
+        #expect(located == checked, "\(checked - located) of \(checked) quotes were not found")
+    }
+
+    /// The passage said twice, word for word. Nothing else in the document is repeated, so
+    /// this is the only place the locator has to choose — and the only place it can be
+    /// caught choosing silently.
+    @Test func theTwinPassageIsReportedAsAmbiguousRatherThanGuessedAt() throws {
+        let document = LargeDocument.markdown(words: Self.targetWords)
+        let shadow = MarkdownShadow.build(document.text, options: .default)
+        let quote = LargeDocument.twinPassage
+
+        let bare = Anchor(blocks: [0], path: "", role: "paragraph", quote: quote,
+                          prefix: "", suffix: "", start: 0, end: quote.count, rect: nil)
+        #expect(MarkdownLocator.locate(bare, in: shadow)?.confidence == .ambiguous)
+
+        // With the heading trail the anchor really carries, it is not a guess any more.
+        let placed = Anchor(blocks: [0],
+                            path: "Appendix A. Two passages that read alike › "
+                                + "A.2 As it appears in the degraded case › paragraph 1",
+                            role: "paragraph", quote: quote, prefix: "", suffix: "",
+                            start: 0, end: quote.count, rect: nil)
+        let found = try #require(MarkdownLocator.locate(placed, in: shadow))
+        #expect(found.confidence == .bySection)
+        #expect(shadow.section(at: found.range.lowerBound)?.headings.last
+                == "A.2 As it appears in the degraded case")
+    }
+
+    /// `<p>` text, flattened, in document order.
+    private func renderedParagraphs(_ html: String) -> [String] {
+        var out: [String] = []
+        var rest = Substring(html)
+        while let open = rest.range(of: "<p>"),
+              let close = rest.range(of: "</p>", range: open.upperBound..<rest.endIndex) {
+            let text = MarkdownTests.flatten(
+                MarkdownTests.visibleText(String(rest[open.upperBound..<close.lowerBound])))
+            if !text.isEmpty { out.append(text) }
+            rest = rest[close.upperBound...]
+        }
+        return out
+    }
+
+    /// Take the markup back out of a source quote, so it can be compared with the page.
+    private func stripMarkup(_ source: String) -> String {
+        var out = ""
+        var i = source.startIndex
+        while i < source.endIndex {
+            let ch = source[i]
+            if ch == "*" || ch == "`" { i = source.index(after: i); continue }
+            if ch == "[", let close = source[i...].firstIndex(of: "]") {
+                out += source[source.index(after: i)..<close]
+                var j = source.index(after: close)
+                if j < source.endIndex, source[j] == "(" {
+                    while j < source.endIndex, source[j] != ")" { j = source.index(after: j) }
+                    if j < source.endIndex { j = source.index(after: j) }
+                }
+                i = j
+                continue
+            }
+            if source[i...].hasPrefix("---") {
+                out += "—"
+                i = source.index(i, offsetBy: 3)
+                continue
+            }
+            out.append(ch)
+            i = source.index(after: i)
+        }
+        return out
+    }
+
+    private func divergence(_ a: String, _ b: String) -> Comment {
+        let x = Array(a), y = Array(b)
+        var k = 0
+        while k < min(x.count, y.count), x[k] == y[k] { k += 1 }
+        return Comment(rawValue: """
+        shadow and page diverge at \(k) of \(x.count)/\(y.count):
+          page  : …\(String(x[max(0, k - 60)..<min(x.count, k + 80)]))
+          shadow: …\(String(y[max(0, k - 60)..<min(y.count, k + 80)]))
+        """)
+    }
+
 }
 
 /// The generator.
@@ -511,5 +657,235 @@ enum LargeDocument {
             "Not defined anywhere in the document. §2 defines two terms and neither is"
                 + " this one.",
         ].randomElement(using: &rng)!
+    }
+}
+
+// MARK: - The same document, written as Markdown
+
+/// A large Markdown document, for the half of the app that does not exist for HTML.
+///
+/// **Not the HTML one converted.** A round-tripped document has no markup a converter did
+/// not choose to emit, and the whole point of a Markdown fixture is the markup: this one is
+/// written so that the things `MarkdownShadow` has to see through are all in it and all
+/// spread through it — emphasis in the middle of a sentence a quote will span, links whose
+/// target is not on the page, code spans, `---` where an em dash appears, footnote markers
+/// that render as a number the author did not write, footnote definitions written in one
+/// place and rendered in another, tables, definition lists, task lists whose checkbox is
+/// not a word, and paragraphs hard-wrapped at 88 columns so that most quotes of any length
+/// cross a newline.
+///
+/// It also says the same sentence in two places on purpose, in `3.9`, because the failure
+/// that matters most is not "the quote was not found" — it is "the quote was found in the
+/// wrong one of two identical passages", and a fixture where every sentence is unique
+/// cannot show it.
+extension LargeDocument {
+
+    struct MadeMarkdown {
+        var text: String
+        var words: Int
+        var headings: Int
+        var footnotes: Int
+    }
+
+    /// Realistic, and load-bearing: a document wrapped at a fixed column is the normal case
+    /// and the one that breaks a naive matcher, because almost every quote worth marking is
+    /// longer than the distance to the end of the line.
+    static let wrapColumn = 88
+
+    static func markdown(words target: Int) -> MadeMarkdown {
+        // A different seed from `make(words:)`, and its own generator, so neither fixture
+        // can move because the other one changed how many numbers it draws.
+        var rng = Seeded(0xD0C5_3EED)
+        var out: [String] = []
+        var words = 0
+        var headings = 0
+        var footnotes = 0
+
+        func emit(_ block: String) {
+            out.append(block)
+            words += block.split(separator: " ").count
+        }
+
+        func emitParagraph(_ text: String) { emit(wrap(text)) }
+
+        out.append("""
+        ---
+        title: Customer Data Platform --- Retention Specification (Consolidated)
+        status: draft
+        owner: Platform
+        ---
+        """)
+        out.append("# Customer Data Platform --- Retention Specification (Consolidated)")
+        headings += 1
+
+        var part = 0
+        var section = 0
+        while words < target {
+            part += 1
+            let partTitle = "\(part). " + topics[(part - 1) % topics.count]
+                + (part > topics.count ? " (continued)" : "")
+            out.append("## " + partTitle)
+            headings += 1
+
+            for facet in facets where words < target {
+                section += 1
+                let sectionTitle = "\(part).\(facets.firstIndex(of: facet)! + 1) "
+                    + facet.prefix(1).uppercased() + facet.dropFirst()
+                out.append("### " + sectionTitle)
+                headings += 1
+
+                for paragraphIndex in 0..<Int.random(in: 4...9, using: &rng) {
+                    var text = decorate(paragraph(&rng), &rng)
+
+                    // A footnote every so often. The marker renders as a number nobody
+                    // wrote, and the definition is put here rather than at the end so the
+                    // shadow's relocation of it is exercised rather than assumed.
+                    if Int.random(in: 0..<7, using: &rng) == 0 {
+                        footnotes += 1
+                        let label = "n\(footnotes)"
+                        text += "[^\(label)]"
+                        emitParagraph(text)
+                        emit("[^\(label)]: " + sentence(&rng))
+                    } else {
+                        emitParagraph(text)
+                    }
+
+                    guard paragraphIndex == 2 else { continue }
+                    emitStructure(section: section, rng: &rng, emit: emit)
+                }
+            }
+        }
+
+        // The passage that occurs twice, word for word, in a document where nothing else
+        // does. Placed at the end so it is a long way from anything that looks like it.
+        out.append("## Appendix A. Two passages that read alike")
+        out.append("### A.1 As it appears in the ordinary case")
+        headings += 2
+        emitParagraph(Self.twinPassage)
+        out.append("### A.2 As it appears in the degraded case")
+        headings += 1
+        emitParagraph(Self.twinPassage)
+
+        return MadeMarkdown(text: out.joined(separator: "\n\n") + "\n",
+                            words: words, headings: headings, footnotes: footnotes)
+    }
+
+    /// Said twice, and identically. The only thing separating the two is the heading above
+    /// each and the words either side — which is exactly what `Anchor` stores and what
+    /// `MarkdownLocator` has to use.
+    static let twinPassage =
+        "The deletion ledger must record a durable tombstone for every deleted row within"
+        + " one scheduling interval, and the reconciliation pass will withhold the derived"
+        + " aggregates computed from the affected records until it has done so."
+
+    private static func emitStructure(section: Int, rng: inout Seeded,
+                                      emit: (String) -> Void) {
+        switch section % 6 {
+        case 0:
+            emit((0..<Int.random(in: 3...6, using: &rng))
+                .map { _ in "- " + decorate(sentence(&rng), &rng) }
+                .joined(separator: "\n"))
+        case 1:
+            var rows = ["| Class | Retention | Trigger | Evidence |",
+                        "|---|---|---|---|"]
+            for row in 0..<Int.random(in: 3...6, using: &rng) {
+                rows.append("| Class \(section)-\(row) | \((row + 1) * 30) days"
+                    + " | \(topics.randomElement(using: &rng)!)"
+                    + " | \(objects.randomElement(using: &rng)!) |")
+            }
+            emit(rows.joined(separator: "\n"))
+        case 2:
+            emit("> " + decorate(sentence(&rng), &rng))
+        case 3:
+            emit("```swift\nretention.apply(class: \"c\(section)\", days: \(section))\n```")
+        case 4:
+            emit(topics.randomElement(using: &rng)!
+                 + "\n: " + decorate(sentence(&rng), &rng))
+        default:
+            emit((0..<Int.random(in: 2...4, using: &rng))
+                .map { index in "- [\(index == 0 ? "x" : " ")] " + sentence(&rng) }
+                .joined(separator: "\n"))
+        }
+    }
+
+    // MARK: - Markup
+
+    /// Put markup through a plain sentence, at word boundaries only, and never twice over
+    /// the same words.
+    ///
+    /// Word boundaries because a marker inside a word is a case Markdown itself disagrees
+    /// with itself about — `foo_bar_baz` is emphasised in some dialects and not others —
+    /// and a fixture whose correctness depends on which one Apex picked is testing the
+    /// wrong thing.
+    ///
+    /// Non-overlapping for a sharper reason, learned by writing it the other way first.
+    /// Two spans chosen independently can interleave, and `**a *b** c*` is not emphasis in
+    /// any dialect: CommonMark gives up and leaves every marker on the page as text. The
+    /// shadow, which is not a parser and deliberately does not implement the emphasis
+    /// algorithm, takes the markers out anyway — so the two disagree, which is exactly the
+    /// disagreement `writeALargeMarkdownDocument` exists to catch. It caught this. The
+    /// fixture was wrong: real documents do not contain crossed emphasis, and a fixture
+    /// that does is testing the app against prose nobody writes.
+    private static func decorate(_ text: String, _ rng: inout Seeded) -> String {
+        var words = text.split(separator: " ").map(String.init)
+        guard words.count > 10 else { return text }
+        var used = Set<Int>()
+
+        /// A run of `length` words that no other decoration has taken, does not start the
+        /// sentence, and does not cross the full stop that ends it.
+        func span(_ length: Int) -> Range<Int>? {
+            for _ in 0..<6 {
+                guard words.count > length + 2 else { return nil }
+                let start = Int.random(in: 1..<(words.count - length - 1), using: &rng)
+                let range = start..<(start + length)
+                if range.contains(where: { used.contains($0) }) { continue }
+                if words[range].contains(where: { $0.hasSuffix(".") }) { continue }
+                // The words either side are left alone as well, so two decorations cannot
+                // end up welded together with no space between their markers.
+                used.formUnion((range.lowerBound - 1)...(range.upperBound))
+                return range
+            }
+            return nil
+        }
+
+        if Int.random(in: 0..<2, using: &rng) == 0, let range = span(3) {
+            words[range.lowerBound] = "**" + words[range.lowerBound]
+            words[range.upperBound - 1] += "**"
+        }
+        if Int.random(in: 0..<3, using: &rng) == 0, let range = span(2) {
+            words[range.lowerBound] = "*" + words[range.lowerBound]
+            words[range.upperBound - 1] += "*"
+        }
+        if Int.random(in: 0..<4, using: &rng) == 0, let range = span(2) {
+            words[range.lowerBound] = "[" + words[range.lowerBound]
+            words[range.upperBound - 1] += "](https://example.com/spec#\(range.lowerBound))"
+        }
+        if Int.random(in: 0..<4, using: &rng) == 0, let range = span(1) {
+            words[range.lowerBound] = "`" + words[range.lowerBound] + "`"
+        }
+        var out = words.joined(separator: " ")
+        // Where an em dash appears on the page, three hyphens are what is in the file.
+        if Int.random(in: 0..<5, using: &rng) == 0, let comma = out.range(of: ", ") {
+            out = out.replacingCharacters(in: comma, with: " --- ")
+        }
+        return out
+    }
+
+    /// Hard-wrap at `wrapColumn`, on spaces, never inside a word.
+    private static func wrap(_ text: String) -> String {
+        var lines: [String] = []
+        var line = ""
+        for word in text.split(separator: " ") {
+            if line.isEmpty {
+                line = String(word)
+            } else if line.count + 1 + word.count <= wrapColumn {
+                line += " " + word
+            } else {
+                lines.append(line)
+                line = String(word)
+            }
+        }
+        if !line.isEmpty { lines.append(line) }
+        return lines.joined(separator: "\n")
     }
 }

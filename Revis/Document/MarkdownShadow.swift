@@ -20,6 +20,12 @@ import Foundation
 /// that cannot be found; being unsure and guessing would cost a quote found in the wrong
 /// place, and `MarkdownLocator` would have no way to tell.
 ///
+/// The price of not being a parser, stated plainly: markup a real parser REFUSES is taken
+/// out here anyway. `**a *b** c*` is crossed emphasis, which CommonMark gives up on and
+/// leaves on the page as literal asterisks — this drops them. A quote over such a passage
+/// is then not found, and is reported as not found. That is the failure this is willing to
+/// have; the other one, silently pointing at the wrong sentence, it is not.
+///
 /// The text it builds is normalised the way the page's own `flatten()` normalises a quote:
 /// runs of whitespace collapsed to one space. Blocks are separated by a newline, which is
 /// the only character in `text` that is not a space or a word — see `MarkdownLocator`,
@@ -170,6 +176,12 @@ private struct Builder {
     private var blockStart = 0
     /// Whether the last thing emitted was a space, so runs collapse.
     private var pendingSpace = false
+    /// Stretches of source inside the block being scanned that are markup rather than
+    /// words — the `>` starting each continued line of a block quote, the indent under a
+    /// list item. Held here rather than passed down because `emitInline` recurses into
+    /// itself for a link's text, and a parameter would have to be carried through every
+    /// helper to reach the one loop that reads it.
+    private var inlineSkips: [Range<Int>] = []
 
     init(source: [Character], options: MarkdownOptions) {
         self.source = source
@@ -293,15 +305,35 @@ private struct Builder {
             // Anything else is prose: a paragraph, a list item, a quoted line, a footnote
             // definition. Each starts a block where its marker says it does, because the
             // runtime anchors on the innermost block and a `<li>` is one.
+            //
+            // Gathered as a WHOLE BLOCK before it is scanned, not line by line, and that is
+            // not tidiness. Inline markup does not stop at the end of a source line: a
+            // document wrapped at any width puts a line break through the middle of a link
+            // several times a page, and a scanner that only ever looks as far as the end of
+            // the current line never finds the closing `]`. It then leaves the whole
+            // `[text](url)` on the page as literal characters — visible only as a quote
+            // that cannot be found, in a document big enough to contain one.
             let content = stripBlockMarkers(line)
             if content.startsNewBlock { closeBlock(.prose) }
-            emitInline(from: content.start, to: line.end)
+            var last = i
+            inlineSkips = []
+            var next = i + 1
+            while next < lines.count, !footnotes.contains(next), continuesProse(lines[next]) {
+                let continuation = stripBlockMarkers(lines[next])
+                if continuation.start > lines[next].start {
+                    inlineSkips.append(lines[next].start..<continuation.start)
+                }
+                last = next
+                next += 1
+            }
+            emitInline(from: content.start, to: lines[last].end)
+            inlineSkips = []
             // The newline ending a wrapped line is a space on the page. Not emitting one
             // welded the last word of each source line to the first word of the next, and
             // a quote spanning a line break then matched nothing — the single most common
             // shape a quote has, in a document wrapped at any width.
             pendingSpace = true
-            i += 1
+            i = last + 1
         }
         closeBlock(.prose)
 
@@ -341,6 +373,20 @@ private struct Builder {
             }
         }
         return found
+    }
+
+    /// Whether `line` carries on the paragraph above rather than starting something.
+    ///
+    /// Everything the main loop would treat as its own block ends the run, so gathering a
+    /// paragraph can never swallow the heading or the table underneath it.
+    private func continuesProse(_ line: (start: Int, end: Int)) -> Bool {
+        if trimmedLead(line).isEmpty { return false }
+        if fenceMarker(line) != nil || isThematicBreak(line) { return false }
+        if atxHeading(line) != nil || isSetextUnderline(line) { return false }
+        if isLinkReferenceDefinition(line) { return false }
+        if isTableRow(line) || isTableSeparator(line) { return false }
+        if isIndentedCode(line) { return false }
+        return !stripBlockMarkers(line).startsNewBlock
     }
 
     // MARK: Block shapes
@@ -575,6 +621,13 @@ private struct Builder {
     private mutating func emitInline(from: Int, to: Int) {
         var i = from
         while i < to {
+            // Markup belonging to the block's shape rather than to its words: the `>` on a
+            // continued line of a quote. Stepped over here, so every scan below reads the
+            // block as the one run of text the page shows.
+            if let skip = inlineSkips.first(where: { $0.contains(i) }) {
+                i = skip.upperBound
+                continue
+            }
             let ch = source[i]
 
             if ch == "\\", i + 1 < to, source[i + 1].isPunctuation || source[i + 1].isSymbol {
