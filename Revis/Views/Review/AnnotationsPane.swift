@@ -16,9 +16,15 @@ struct AnnotationsPane: View {
     /// ever open, and a half-typed remark is not part of the review until it is sent.
     @State private var replyText = ""
 
-    /// Whether anything is being typed into the list. A draft and a reply composer both
-    /// grow a row as you write, and both want the list held at its bottom edge for it.
-    private var isComposing: Bool { model.draft != nil || model.replyTarget != nil }
+    /// Whether the row being written in is the last one in the list — the only row whose
+    /// growth can push its own buttons off the bottom of the pane.
+    private var composingAtEnd: Bool {
+        if let index = model.draftIndex { return index >= model.visibleAnnotations.count }
+        if let target = model.replyTarget {
+            return model.visibleAnnotations.last?.id == target
+        }
+        return false
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -120,17 +126,24 @@ struct AnnotationsPane: View {
                     }
                 }
             }
-            // Hold the BOTTOM of the list still while a row is being written in.
+            // Hold the BOTTOM of the list still while the LAST row is being written in.
             //
             // A text field that takes another line makes its row taller, and a scroll view
             // holding its top offset answers by letting the extra hang off the end — which
-            // for the last row is the Add button sliding under the edge of the pane as you
+            // for the last row is the button sliding under the edge of the pane as you
             // type. Anchored at the bottom the box grows upward instead and the buttons
             // stay where your hand already is. Both roles are load-bearing: the size-change
             // compensation is worked out against the offset anchor, so the two have to name
             // the same edge.
-            .defaultScrollAnchor(isComposing ? .bottom : nil, for: .sizeChanges)
-            .defaultScrollAnchor(isComposing ? .bottom : nil, for: .initialOffset)
+            //
+            // ONLY for the last row, and that condition is not a refinement — anchoring
+            // the bottom of the list means holding the bottom of the LAST row still, which
+            // on a review of three annotations is the row you are writing in and on a
+            // review of three hundred is four hundred rows away. Opening a composer in the
+            // middle threw the pane to the end of the list. No row but the last one can
+            // slide under the edge, so no other row has anything to gain from it.
+            .defaultScrollAnchor(composingAtEnd ? .bottom : nil, for: .sizeChanges)
+            .defaultScrollAnchor(composingAtEnd ? .bottom : nil, for: .initialOffset)
             .onChange(of: model.draft?.token) { _, token in
                 guard token != nil else { return }
                 reveal(Self.draftRowID, with: scroll)

@@ -15,48 +15,32 @@ struct FileFormatTests {
     /// LOOK at a review, and opening this one showed an empty margin beside a full pane —
     /// which reads as the app being broken rather than as the fixture being a sketch. A
     /// specimen has to be a specimen of the whole thing.
+    /// A review of the REAL sample document, anchored where the runtime will look.
+    ///
+    /// It used to carry a one-line stub for a body and hand-written block numbers, and both
+    /// were wrong in the same quiet way: an anchor pointing at a block the document does not
+    /// have is one the runtime declines to draw, correctly and silently, so the specimen
+    /// opened looking like a broken app rather than a broken fixture. Nothing is written
+    /// down here now except the words — `ReviewFixtures.document()` finds the block.
     private func sample() -> ReviewFile {
-        let html = ReviewFixtures.html()
-        let text = ReviewFixtures.plainText(html)
-        // Block indices match the runtime's `data-rv` stamping of this document, the same
-        // ones `ExportRealismTests` uses.
-        // `within` is the block's own text, because this specimen is OPENED — offsets
-        // measured against the document put every highlight at the end of its paragraph.
-        let scope = "This document specifies how long the Customer Data Platform retains"
-            + " each class of record, what triggers deletion, and how deletion is"
-            + " evidenced. It applies to all environments including staging , which has"
-            + " historically been treated as exempt."
-        let deletion = "Irreversible removal from primary storage, all replicas, and all"
-            + " backups taken after the deletion request."
-        let span = ReviewFixtures.anchor(
-            "each class of record", block: 3, path: "1. Scope › paragraph 1",
-            within: scope, in: text)
-        let definition = ReviewFixtures.anchor(
-            deletion, block: 9, path: "2. Definitions › definition 2", role: "definition",
-            within: deletion, in: text)
-        // A drawn box, so the specimen shows the one anchor kind that has no character
-        // range — the case a reader of the format is most likely to get wrong.
-        let region = Anchor(
-            blocks: [19], path: "3. Retention periods › 3.3 Summary › table", role: "region",
-            quote: "Class Retention Trigger Evidence Personal data 90 days Collection event"
-                + " Worker log Audit records 7 years Write Immutable store Aggregates"
-                + " Indefinite — None Support transcripts 180 days Ticket close Worker log",
-            prefix: "", suffix: "", start: -1, end: -1,
-            rect: NormalizedRect(x: -0.02, y: -0.31, width: 1.79, height: 1.23))
+        let document = ReviewFixtures.document()
         return ReviewFile(
             source: SourceInfo(name: "data-retention-spec.html",
                                path: "/Users/robert/Documents/data-retention-spec.html",
                                capturedAt: Date(timeIntervalSince1970: 1_788_690_000),
-                               digest: SourceInfo.digest(of: Data(html.utf8))),
-            document: DocumentPrep.prepare(html: html, baseURL: nil),
+                               digest: SourceInfo.digest(of: Data(document.html.utf8))),
+            document: DocumentPrep.prepare(html: document.html, baseURL: nil),
             annotations: [
                 Annotation(author: "Robert Salesas", intent: .change,
                            note: "Say \"category\" rather than \"class\" — class means"
                                + " something else in the data model.",
-                           anchor: span),
+                           anchor: ReviewFixtures.anchor("each class of record",
+                                                         in: document)),
                 Annotation(author: "Robert Salesas", intent: .question,
                            note: "Does \"all backups\" include the offsite weeklies?",
-                           anchor: definition,
+                           anchor: ReviewFixtures.anchor(
+                               "all backups taken after the deletion request",
+                               in: document),
                            replies: [
                                Reply(author: "Claude",
                                      text: "No — §2 says \"all backups taken after the"
@@ -66,9 +50,12 @@ struct FileFormatTests {
                                Reply(author: "Robert Salesas",
                                      text: "Then the definition needs to say so."),
                            ]),
+                // A drawn box, so the specimen shows the one anchor kind with no character
+                // range — the case a reader of the format is most likely to get wrong.
                 Annotation(author: "Priya Raman", intent: .change,
                            note: "The retention column has to match §3.1.",
-                           anchor: region),
+                           anchor: ReviewFixtures.region(over: "Class Retention Trigger",
+                                                         in: document)),
             ])
     }
 
@@ -79,8 +66,11 @@ struct FileFormatTests {
         #expect(restored == original)
         // Every anchor still says what it is about, which is the only part of a review
         // that a regenerated document cannot invalidate.
-        #expect(restored.annotations[1].anchor.quote.contains("Irreversible removal"))
+        #expect(restored.annotations[1].anchor.quote.contains("all backups"))
         #expect(restored.annotations[2].anchor.isRegion)
+        // The region names the table, not whatever block happens to sit at a number
+        // somebody typed. This is the assertion the old fixture could not have made.
+        #expect(restored.annotations[2].anchor.quote.hasPrefix("Class Retention"))
         // A thread survives in order and keeps who said what, including which remark came
         // from a machine.
         #expect(restored.annotations[1].replies.map(\.isAssistant) == [true, false])

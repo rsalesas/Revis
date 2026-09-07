@@ -36,8 +36,9 @@ struct ExportRealismTests {
     }
 
     static func realisticFile() throws -> ReviewFile {
-        let html = ReviewFixtures.html()
-        let text = ReviewFixtures.plainText(html)
+        let document = ReviewFixtures.document()
+        let html = document.html
+        let text = document.text
         let prepared = DocumentPrep.prepare(html: html, baseURL: nil)
 
         // LITERAL ids, not fresh ones, and this is what makes the round trip testable at
@@ -65,9 +66,7 @@ struct ExportRealismTests {
         var annotations: [Annotation] = [
             // 1. The straightforward case: one occurrence, plain prose.
             note(.change, "Make this thirty (30) days.",
-                 ReviewFixtures.anchor("ninety (90) days", block: 11,
-                             path: "3. Retention periods › 3.1 Personal data › paragraph 1",
-                             in: text)),
+                 ReviewFixtures.anchor("ninety (90) days", in: document)),
 
             // 2. THE HARD ONE. "Worker log" appears twice in the summary table, and only
             //    the second is meant. Nothing but the surrounding words can tell them
@@ -75,53 +74,38 @@ struct ExportRealismTests {
             //    enough or whether anchors have to be carried in the document.
             note(.change, "Support transcripts are evidenced by the ticket record, not the"
                  + " worker log. Change this one only.",
-                 ReviewFixtures.anchor("Worker log", occurrence: 1, block: 19,
-                             path: "3. Retention periods › 3.3 Summary › table",
-                             role: "table", in: text)),
+                 ReviewFixtures.anchor("Worker log", occurrence: 1, in: document)),
 
             // 3. A whole block, removed.
             note(.remove, "This is covered by the corporate schedule already — take the"
                  + " whole callout out.",
                  ReviewFixtures.anchor("Anything not named in §3 is out of scope and continues to"
-                             + " follow the general corporate retention schedule.",
-                             block: 5, path: "1. Scope › paragraph 2", in: text)),
+                             + " follow the general corporate retention schedule.", in: document)),
 
             // 4. A question, which asks for no edit at all.
             note(.question, "Where is the fifty-individual threshold defined? It is not in"
                  + " §2.",
                  ReviewFixtures.anchor("Aggregates over cohorts smaller than fifty individuals are"
-                             + " treated as personal data.", block: 17,
-                             path: "3. Retention periods › 3.2 Derived and aggregate data"
-                                 + " › paragraph 2", in: text)),
+                             + " treated as personal data.", in: document)),
 
             // 5. A comment: something worth knowing, asking for no edit.
             note(.comment, "This definition is the one everything else leans on — worth"
                  + " keeping exactly as it is.",
                  ReviewFixtures.anchor("Irreversible removal from primary storage, all replicas, and"
-                             + " all backups taken after the deletion request.", block: 9,
-                             path: "2. Definitions › definition 2", role: "definition",
-                             in: text)),
+                             + " all backups taken after the deletion request.", in: document)),
         ]
 
         // 6. A REGION — the whole thesis. The reviewer drew a box over the summary table;
         //    what the export carries is the text the box covered.
-        let tableText = "Class Retention Trigger Evidence Personal data 90 days Collection"
-            + " event Worker log Audit records 7 years Write Immutable store Aggregates"
-            + " Indefinite — None Support transcripts 180 days Ticket close Worker log"
         annotations.append(note(
             .change, "The retention column here has to match §3.1 once that is corrected.",
-            Anchor(blocks: [19], path: "3. Retention periods › 3.3 Summary › table",
-                   role: "region", quote: tableText, prefix: "", suffix: "",
-                   start: -1, end: -1,
-                   rect: NormalizedRect(x: 0.0, y: 0.0, width: 1.0, height: 1.0))))
+            ReviewFixtures.region(over: "Class Retention Trigger", in: document)))
 
         // 7. A request that a second reviewer TURNED DOWN. The export must tell the
         //    reader not to act on it — a declined suggestion handed over as work is a
         //    change somebody explicitly refused.
         var refused = note(.change, "Make the retention worker run every fifteen minutes.",
-                           ReviewFixtures.anchor("The retention worker runs hourly.", block: 21,
-                                       path: "4. Deletion mechanics › paragraph 1",
-                                       in: text))
+                           ReviewFixtures.anchor("The retention worker runs hourly.", in: document))
         refused.decide(.declined, by: "Robert Salesas")
         // A thread on the DECLINED item, which is where the remark saying why is worth
         // most — and which the Declined section would drop if only `item` carried threads.
@@ -138,9 +122,7 @@ struct ExportRealismTests {
         //    is the one rule about threads a reader has to get right.
         var argued = note(.change, "Change the aggregate retention to five years.",
                           ReviewFixtures.anchor("Aggregates computed from personal data are retained"
-                                      + " indefinitely", block: 17,
-                                      path: "3. Retention periods › 3.2 Derived and"
-                                          + " aggregate data › paragraph 1", in: text))
+                                      + " indefinitely", in: document))
         argued.replies = [
             Reply(author: "Priya Raman",
                   text: "Five is too long — legal said two years at the review last week."),
@@ -156,8 +138,7 @@ struct ExportRealismTests {
             .insert, "Add a sentence here saying what happens when a replica is offline at"
                 + " the moment the delete is issued.",
             ReviewFixtures.anchor("Backups are not rewritten; instead the tombstone is replayed when"
-                        + " a backup is restored.", block: 21,
-                        path: "4. Deletion mechanics › paragraph 1", in: text)))
+                        + " a backup is restored.", in: document)))
 
         let file = ReviewFile(
             source: SourceInfo(name: "data-retention-spec.html", path: nil,
