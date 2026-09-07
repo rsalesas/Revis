@@ -624,7 +624,18 @@
   };
 
   window.rvSetAnnotations = function (json) {
-    try { annotations = JSON.parse(json) || []; } catch (e) { annotations = []; }
+    /* REPORTED, not swallowed. This used to be a bare `catch { annotations = [] }`, and a
+       list that fails to parse is a page with no marks, no highlights and no complaint —
+       the same silence `run()` in DocumentWebView was fixed for, in the same app, for the
+       same reason. It cost an hour on a document with two thousand blocks: everything
+       looked correct except that nothing was drawn. */
+    try {
+      annotations = JSON.parse(json) || [];
+    } catch (e) {
+      annotations = [];
+      post("error", { stage: "annotations",
+                      message: "could not read the list: " + ((e && e.message) || e) });
+    }
     paint();
   };
 

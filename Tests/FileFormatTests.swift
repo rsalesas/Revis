@@ -20,12 +20,20 @@ struct FileFormatTests {
         let text = ReviewFixtures.plainText(html)
         // Block indices match the runtime's `data-rv` stamping of this document, the same
         // ones `ExportRealismTests` uses.
+        // `within` is the block's own text, because this specimen is OPENED — offsets
+        // measured against the document put every highlight at the end of its paragraph.
+        let scope = "This document specifies how long the Customer Data Platform retains"
+            + " each class of record, what triggers deletion, and how deletion is"
+            + " evidenced. It applies to all environments including staging , which has"
+            + " historically been treated as exempt."
+        let deletion = "Irreversible removal from primary storage, all replicas, and all"
+            + " backups taken after the deletion request."
         let span = ReviewFixtures.anchor(
-            "each class of record", block: 3, path: "1. Scope › paragraph 1", in: text)
+            "each class of record", block: 3, path: "1. Scope › paragraph 1",
+            within: scope, in: text)
         let definition = ReviewFixtures.anchor(
-            "Irreversible removal from primary storage, all replicas, and all backups taken"
-                + " after the deletion request.",
-            block: 9, path: "2. Definitions › definition 2", role: "definition", in: text)
+            deletion, block: 9, path: "2. Definitions › definition 2", role: "definition",
+            within: deletion, in: text)
         // A drawn box, so the specimen shows the one anchor kind that has no character
         // range — the case a reader of the format is most likely to get wrong.
         let region = Anchor(
