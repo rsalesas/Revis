@@ -307,7 +307,10 @@ fi
 
 echo "→ Tagging and pushing..."
 git tag -a "$TAG" -m "Revis $VERSION"
-git push origin HEAD
+# Explicitly to main, not `git push origin HEAD`. This is normally run from a
+# worktree on a topic branch, and pushing HEAD there publishes a branch nobody
+# asked for — while the version-bump commit the tag names still never reaches main.
+git push origin HEAD:main
 git push origin "$TAG"
 
 BODY_FILE="$BUILD_DIR/release-notes.md"
