@@ -17,9 +17,15 @@ import Foundation
 /// same sentences in a different order. The generator is thirty lines of rules and a seed,
 /// and it is reproducible, which a file somebody made once by hand is not.
 ///
-/// Written to `build/`, which is gitignored:
-/// - `large-spec.html` — the document, openable on its own
-/// - `large-review.revis` — a review of it, openable directly
+/// **Generated, and also COMMITTED**, into `Samples/`. The two are not in tension: the
+/// generator is the source of truth and the artefacts are what it produces, byte for byte,
+/// which is why nothing here is allowed to vary run to run — one moving timestamp and every
+/// test run would leave the working tree dirty for a change nobody made. Committing them
+/// means somebody who clones this can open a three-hundred-page review in one gesture
+/// without a toolchain; 880 KB of repetitive prose is 55 KB in the object store.
+///
+/// - `Samples/large-spec.html` — the document, openable on its own
+/// - `Samples/large-review.revis` — a review of it, openable directly
 struct LargeDocumentTests {
 
     /// About three hundred pages of PDF at four hundred and fifty words a page.
@@ -32,7 +38,7 @@ struct LargeDocumentTests {
 
         let directory = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("build")
+            .appendingPathComponent("Samples")
         try? FileManager.default.createDirectory(at: directory,
                                                  withIntermediateDirectories: true)
         try document.html.write(to: directory.appendingPathComponent("large-spec.html"),
@@ -368,6 +374,17 @@ enum LargeDocument {
     /// shows up at the size this fixture exists to reach.
     static func review(of document: Made, annotations count: Int) -> ReviewFile {
         var rng = Seeded(0xA55E_5713)
+        // A fixed moment, not `.reviewStamp`, which is now. This review is COMMITTED, so a
+        // timestamp that moves makes every test run rewrite the file and leaves the working
+        // tree dirty for no change anybody made.
+        let when = Date(timeIntervalSince1970: 1_788_690_000)
+        // Ids too, and for the same reason: `UUID()` is fresh every run, so a committed
+        // review whose ids move is a file that changes on every test with nothing in it
+        // different. Derived from the step, which is what makes this reproducible rather
+        // than merely repeatable.
+        func id(_ n: Int) -> UUID {
+            UUID(uuidString: String(format: "5ee00000-0000-4000-8000-%012d", n)) ?? UUID()
+        }
         let text = ReviewFixtures.plainText(document.html)
         var cursor = text.startIndex
         var made: [Annotation] = []
@@ -426,6 +443,8 @@ enum LargeDocument {
                     ? NormalizedRect(x: 0, y: 0, width: 1, height: 1) : nil)
 
             var annotation = Annotation(
+                id: id(step),
+                created: when,
                 author: authors[step % authors.count],
                 intent: intent,
                 note: instruction(for: intent, &rng),
@@ -439,11 +458,13 @@ enum LargeDocument {
             if step % 7 == 0 { annotation.status = .resolved }
             if step % 5 == 0 {
                 annotation.replies = [
-                    Reply(author: "Claude", text: reply(&rng), isAssistant: true),
+                    Reply(id: id(10_000 + step), created: when, author: "Claude",
+                          text: reply(&rng), isAssistant: true),
                 ]
                 if step % 10 == 0 {
                     annotation.replies.append(
-                        Reply(author: "Robert Salesas", text: reply(&rng)))
+                        Reply(id: id(20_000 + step), created: when,
+                              author: "Robert Salesas", text: reply(&rng)))
                 }
             }
             made.append(annotation)

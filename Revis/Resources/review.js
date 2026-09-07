@@ -106,7 +106,7 @@
           while (headings.length && headings[headings.length - 1].depth >= depth) {
             headings.pop();
           }
-          var text = flatten(child.textContent);
+          var text = flatten(textOf(child));
           /* The document's own title is not a section, so it does not belong in the
              trail. Left in, EVERY path began with it — and since a generated spec's
              title is a sentence, every path in the pane was then truncated from the
@@ -157,6 +157,38 @@
 
   function flatten(text) {
     return (text || "").replace(/\s+/g, " ").trim();
+  }
+
+  /* Elements whose text runs on. Everything else is a break, and gets a space.
+     Deliberately a list of what is INLINE rather than of what is not: the tags that read
+     as part of a sentence are few and known, and a tag nobody thought of is far more
+     likely to be a box than a word. */
+  var INLINE = {
+    A: 1, ABBR: 1, B: 1, BDI: 1, BDO: 1, CITE: 1, CODE: 1, DATA: 1, DEL: 1, DFN: 1, EM: 1,
+    I: 1, INS: 1, KBD: 1, MARK: 1, Q: 1, RUBY: 1, S: 1, SAMP: 1, SMALL: 1, SPAN: 1,
+    STRONG: 1, SUB: 1, SUP: 1, TIME: 1, U: 1, VAR: 1, WBR: 1,
+  };
+
+  /* An element's text, with a space where the words really are separated.
+   *
+   * NOT `textContent`, which is what this was, and which concatenates with nothing in
+   * between: a table came out as "ClassRetentionTriggerEvidence Personal data90 days" and
+   * that is what a region drawn over one put in the export. The whole claim of the region
+   * tool is that what leaves the app is the text the box was drawn over — mush is not that
+   * text, and a reader cannot act on it.
+   *
+   * Only ever used for a QUOTE, never for an offset. Offsets are walked over real text
+   * nodes by `positionAt`, so the two cannot be made to disagree by this; the anchors that
+   * quote a whole block or a region carry no character range at all. */
+  function textOf(node) {
+    var out = "";
+    for (var child = node.firstChild; child; child = child.nextSibling) {
+      if (child.nodeType === 3) { out += child.nodeValue; continue; }
+      if (child.nodeType !== 1) continue;
+      var inner = textOf(child);
+      out += INLINE[child.tagName] ? inner : " " + inner + " ";
+    }
+    return out;
   }
 
   /* Collapsed whitespace, trimmed only on the side away from the quote. `side` names the
@@ -317,7 +349,7 @@
       blocks: [index],
       path: meta[index] ? meta[index].path : "",
       role: meta[index] ? meta[index].role : "block",
-      quote: flatten(block.textContent) || describeEmpty(block),
+      quote: flatten(textOf(block)) || describeEmpty(block),
       prefix: "", suffix: "", start: -1, end: -1, rect: null,
     });
   };
@@ -349,7 +381,7 @@
       if (box.right < rect.left || box.left > rect.right) continue;
       if (box.bottom < rect.top || box.top > rect.bottom) continue;
       covered.push(i);
-      var text = flatten(blocks[i].textContent) || describeEmpty(blocks[i]);
+      var text = flatten(textOf(blocks[i])) || describeEmpty(blocks[i]);
       if (text) texts.push(text);
     }
     if (!covered.length) return null;

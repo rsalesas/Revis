@@ -125,10 +125,18 @@ extension ReviewFixtures {
         var counts: [String: Int] = [:]
         var titleSeen = false
 
+        // Once an element is stamped the runtime moves to its next SIBLING — it never looks
+        // inside. Without that, a `figcaption` inside a stamped `figure` is stamped too,
+        // and every index after the figure is one too high. The count agreed for the first
+        // twenty blocks of the sample document, which is how it survived a spot check.
+        var skipUntil: String.Index?
+
         for element in scanned {
+            if let limit = skipUntil, element.inner.lowerBound < limit { continue }
             guard blockTags.contains(element.tag) else { continue }
             let inner = String(body[element.inner])
             if !atomicTags.contains(element.tag), containsBlock(inner) { continue }
+            skipUntil = element.inner.upperBound
 
             let role = roles[element.tag] ?? "block"
             let text = flatten(inner)
@@ -174,16 +182,29 @@ extension ReviewFixtures {
         return false
     }
 
-    /// Tags stripped, entities resolved, whitespace collapsed — the same shape `plainText`
-    /// produces, so an offset measured in one means the same thing in the other.
+    /// A block's text the way `textOf` in review.js builds it: inline tags run on, anything
+    /// else is a break and gets a space. The mirror has to make the same choice or the
+    /// walk's text and the runtime's disagree for every table in the document.
+    private static let inlineTags: Set<String> = [
+        "A", "ABBR", "B", "BDI", "BDO", "CITE", "CODE", "DATA", "DEL", "DFN", "EM", "I",
+        "INS", "KBD", "MARK", "Q", "RUBY", "S", "SAMP", "SMALL", "SPAN", "STRONG", "SUB",
+        "SUP", "TIME", "U", "VAR", "WBR",
+    ]
+
     private static func flatten(_ inner: String) -> String {
         var out = ""
-        var inTag = false
-        for character in inner {
-            if character == "<" { inTag = true; out.append(" ") }
-            else if character == ">" { inTag = false }
-            else if !inTag { out.append(character) }
+        var cursor = inner.startIndex
+        while let open = inner[cursor...].firstIndex(of: "<") {
+            out += inner[cursor..<open]
+            guard let close = inner[open...].firstIndex(of: ">") else { break }
+            let after = inner.index(after: open)
+            let nameStart = after < inner.endIndex && inner[after] == "/"
+                ? inner.index(after: after) : after
+            let name = inner[nameStart..<close].prefix { $0.isLetter || $0.isNumber }
+            if !inlineTags.contains(name.uppercased()) { out += " " }
+            cursor = inner.index(after: close)
         }
+        out += inner[cursor...]
         return out.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
     }
