@@ -445,11 +445,20 @@ final class ReviewModel: ObservableObject {
         }
     }
 
-    /// Whose reply this is to withdraw. Same shape as `Annotation.isEditable` — your own,
-    /// or one nobody signed — but asked of the REPLY's author, not the annotation's: a
-    /// remark under somebody else's request is still yours.
+    /// Whose reply this is to withdraw: your own, one nobody signed, **or an assistant's**.
+    ///
+    /// Asked of the REPLY's author rather than the annotation's, because a remark under
+    /// somebody else's request is still yours.
+    ///
+    /// The assistant clause is not a loosening, it is the same rule read properly. What the
+    /// rule protects is one reviewer's words from another reviewer's hand — and an
+    /// assistant is not a party to the review whose account of itself has to be defended
+    /// from the person who asked for it. It is also the only way out of a bad import: this
+    /// app has no undo manager, so without it a reply document imported by mistake would be
+    /// in the file for good.
     func canDelete(_ reply: Reply) -> Bool {
-        reply.author.isEmpty
+        reply.isAssistant
+            || reply.author.isEmpty
             || reply.author.compare(author, options: .caseInsensitive) == .orderedSame
     }
 
@@ -464,6 +473,20 @@ final class ReviewModel: ObservableObject {
     }
 
     func cancelReply() { replyTarget = nil }
+
+    /// Attach a read reply document.
+    ///
+    /// One assignment back into `annotations`, not an append per reply: it is `@Published`,
+    /// and appending in a loop republishes the pane and re-pushes the page's marks once per
+    /// reply for what the reviewer did as a single action.
+    @discardableResult
+    func importReplies(_ landings: [ReplyImport.Landing],
+                       signedBy author: String) -> ReplyImport.Result {
+        var working = annotations
+        let result = ReplyImport.attach(landings, to: &working, signedBy: author)
+        annotations = working
+        return result
+    }
 
     /// Deleting is editing, and follows the same rule: another reviewer's annotation is
     /// not yours to remove, and a decided one is not anybody's.

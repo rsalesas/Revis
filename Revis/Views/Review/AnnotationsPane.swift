@@ -10,7 +10,15 @@ struct AnnotationsPane: View {
     @ObservedObject var model: ReviewModel
 
     @FocusState private var focused: Field?
-    private enum Field: Hashable { case draft, note(UUID) }
+    private enum Field: Hashable { case draft, note(UUID), reply(UUID) }
+
+    /// The reply being written, held here rather than on the model: only one composer is
+    /// ever open, and a half-typed remark is not part of the review until it is sent.
+    @State private var replyText = ""
+
+    /// Whether anything is being typed into the list. A draft and a reply composer both
+    /// grow a row as you write, and both want the list held at its bottom edge for it.
+    private var isComposing: Bool { model.draft != nil || model.replyTarget != nil }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +34,10 @@ struct AnnotationsPane: View {
         .onChange(of: model.draft?.token) { _, token in
             guard token != nil else { return }
             focused = .draft
+        }
+        .onChange(of: model.replyToken) { _, _ in
+            guard let target = model.replyTarget else { return }
+            focused = .reply(target)
         }
     }
 
@@ -117,8 +129,8 @@ struct AnnotationsPane: View {
             // stay where your hand already is. Both roles are load-bearing: the size-change
             // compensation is worked out against the offset anchor, so the two have to name
             // the same edge.
-            .defaultScrollAnchor(model.draft != nil ? .bottom : nil, for: .sizeChanges)
-            .defaultScrollAnchor(model.draft != nil ? .bottom : nil, for: .initialOffset)
+            .defaultScrollAnchor(isComposing ? .bottom : nil, for: .sizeChanges)
+            .defaultScrollAnchor(isComposing ? .bottom : nil, for: .initialOffset)
             .onChange(of: model.draft?.token) { _, token in
                 guard token != nil else { return }
                 reveal(Self.draftRowID, with: scroll)
@@ -219,6 +231,7 @@ struct AnnotationsPane: View {
             heading(annotation)
             quoted(annotation.anchor)
             body(annotation, selected: selected)
+            thread(annotation)
             footer(annotation, selected: selected)
         }
         .padding(.leading, 13).padding(.trailing, 16).padding(.vertical, 12)
@@ -288,6 +301,103 @@ struct AnnotationsPane: View {
         }
     }
 
+    /// What has been said back, and the field to say something.
+    ///
+    /// Always shown, not only on the selected row: a thread you have to click to discover
+    /// is a thread nobody reads, and the point of a reply is that the reviewer sees the
+    /// answer beside their own question.
+    ///
+    /// Its own function rather than a fifth child written inline — as one expression this
+    /// row already grew past what the type checker will attempt, and it announces that by
+    /// refusing to compile the file rather than by naming the line.
+    @ViewBuilder
+    private func thread(_ annotation: Annotation) -> some View {
+        if !annotation.replies.isEmpty || model.replyTarget == annotation.id {
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(annotation.replies) { reply in
+                    said(reply, on: annotation)
+                }
+                if model.replyTarget == annotation.id { composer(annotation) }
+            }
+            .padding(.leading, 7)
+            // The card's existing idiom for a nested thing, borrowed from `quoted` — a
+            // `Divider` here would be the separator the LIST puts between cards, and would
+            // read as one card ending and another starting.
+            .overlay(alignment: .leading) {
+                Rectangle().fill(Theme.hairline).frame(width: 2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// One remark.
+    ///
+    /// Name above text, not beside it: the pane is 300 points wide and the card's padding
+    /// leaves 271 of them, which a name, a badge and a sentence cannot share.
+    ///
+    /// A machine is named as one with a badge rather than a colour. `AnnotationPalette`
+    /// settled that question already — colour here means *what is being asked*, and a
+    /// second colour axis for who is speaking would compete with it.
+    private func said(_ reply: Reply, on annotation: Annotation) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Text(reply.author.isEmpty ? "Unsigned" : reply.author)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                if reply.isAssistant {
+                    badge("Assistant", colour: .secondary,
+                          help: "Imported from a reply document — written by an assistant,"
+                              + " not by a reviewer")
+                }
+                Spacer()
+                if model.canDelete(reply) {
+                    Button {
+                        withMotion(.reveal) { model.deleteReply(reply.id, from: annotation.id) }
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .foregroundStyle(.tertiary)
+                    .help("Withdraw this reply. There is no editing one — somebody may"
+                          + " already have answered it.")
+                }
+            }
+            Text(reply.text)
+                .font(.system(size: 12))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func composer(_ annotation: Annotation) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("Say something back", text: $replyText, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .lineLimit(1...8)
+                .focused($focused, equals: .reply(annotation.id))
+                .onSubmit { send(to: annotation.id) }
+            HStack(spacing: 8) {
+                Spacer()
+                Button("Cancel") {
+                    replyText = ""
+                    withMotion(.reveal) { model.cancelReply() }
+                }
+                Button("Reply") { send(to: annotation.id) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.accent)
+                    .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .controlSize(.small)
+        }
+    }
+
+    private func send(to id: UUID) {
+        withMotion(.reveal) { model.addReply(replyText, to: id) }
+        replyText = ""
+    }
+
     /// Who wrote it, and — when it is the chosen row — what can be done about it.
     private func footer(_ annotation: Annotation, selected: Bool) -> some View {
         HStack(spacing: 6) {
@@ -336,6 +446,15 @@ struct AnnotationsPane: View {
             }
             Divider().frame(height: 11)
         }
+        // Replying is a RESPONSE, so it sits with the verdicts and Resolve rather than
+        // with the controls `canEdit` governs — you may not rewrite what somebody asked
+        // for, and you may always say something about it.
+        Button("Reply") {
+            replyText = ""
+            withMotion(.reveal) { model.beginReply(to: annotation.id) }
+        }
+        .help("Say something back about this. Anyone can reply, including on an annotation"
+              + " that has been decided.")
         // Resolving is open to anyone: it says the thing was dealt with, which is a fact
         // about the work rather than a change to what was said.
         if annotation.status == .open {

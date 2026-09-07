@@ -33,6 +33,15 @@ struct RevisCommands: Commands {
             .disabled(review == nil)
 
             Divider()
+            // Replying is offered whatever the annotation's state: it is a response, and
+            // neither authorship nor a verdict has any business stopping one. The only
+            // condition is having a row chosen to reply TO.
+            Button("Reply to Annotation") {
+                if let id = review?.selectedID { review?.beginReply(to: id) }
+            }
+            .keyboardShortcut("l", modifiers: [.command, .shift])
+            .disabled(review?.selectedID == nil)
+
             Button("Resolve Annotation") {
                 if let id = review?.selectedID { review?.resolve(id) }
             }
@@ -47,6 +56,15 @@ struct RevisCommands: Commands {
                 NotificationCenter.default.post(name: .revisShowExport, object: review)
             }
             .keyboardShortcut("e", modifiers: .command)
+            .disabled(review?.annotations.isEmpty != false)
+
+            // Beside Export, because it is the same journey turned round: what was handed
+            // out comes back with answers on it.
+            Button("Import Replies…") {
+                guard let review else { return }
+                NotificationCenter.default.post(name: .revisImportReplies, object: review)
+            }
+            .keyboardShortcut("i", modifiers: [.command, .shift])
             .disabled(review?.annotations.isEmpty != false)
         }
 

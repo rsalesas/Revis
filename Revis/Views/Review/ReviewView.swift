@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 /// One review window.
 ///
@@ -14,6 +16,7 @@ struct ReviewView: View {
 
     /// Whether the export sheet is up, and what it holds.
     @State private var export: ExportPreview?
+    @State private var replyImport: ReplyImportPreview?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,6 +43,11 @@ struct ReviewView: View {
             appSettings.lastInspectorVisible = visible
         }
         .sheet(item: $export) { ExportSheet(preview: $0) }
+        .sheet(item: $replyImport) { ReplyImportSheet(preview: $0) }
+        .onReceive(NotificationCenter.default.publisher(for: .revisImportReplies)) { note in
+            guard (note.object as? ReviewModel) === model else { return }
+            replyImport = ReplyImportPreview(model: model)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .revisShowExport)) { note in
             guard (note.object as? ReviewModel) === model else { return }
             export = ExportPreview(markdown: model.exportMarkdown(),
@@ -235,6 +243,7 @@ extension Notification.Name {
     /// Posted by the toolbar button and by the File menu; carries the model it means, so
     /// it reaches one window rather than all of them.
     static let revisShowExport = Notification.Name("app.revis.showExport")
+    static let revisImportReplies = Notification.Name("app.revis.importReplies")
 }
 
 /// What a window shows before there is anything to review.

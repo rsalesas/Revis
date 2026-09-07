@@ -43,6 +43,11 @@ final class AppSettings: ObservableObject {
     /// Whether the export writes the JSON sidecar beside the Markdown.
     @Published var exportSidecar: Bool { didSet { save(.exportSidecar, exportSidecar) } }
 
+    /// Who imported replies are signed as when the document did not say. Remembered
+    /// because it is the same assistant most of the time and retyping it every import is a
+    /// question already answered.
+    @Published var lastReplyAuthor: String { didSet { save(.lastReplyAuthor, lastReplyAuthor) } }
+
     // Window shape. Deliberately NOT @Published — these are read only when a window is
     // created, and publishing here would re-render every open window whenever one of them
     // opened a pane.
@@ -60,7 +65,7 @@ final class AppSettings: ObservableObject {
     }
 
     private enum Key: String {
-        case reviewerName, defaultIntent, defaultTool, exportSidecar
+        case reviewerName, defaultIntent, defaultTool, exportSidecar, lastReplyAuthor
         case useDocumentStyle, defaultZoom
         case annotationsVisible, inspectorVisible
     }
@@ -74,6 +79,7 @@ final class AppSettings: ObservableObject {
         defaultTool = ReviewTool(rawValue: defaults.string(forKey: Key.defaultTool.rawValue) ?? "")
             ?? .select
         exportSidecar = defaults.object(forKey: Key.exportSidecar.rawValue) as? Bool ?? true
+        lastReplyAuthor = defaults.string(forKey: Key.lastReplyAuthor.rawValue) ?? "Assistant"
         useDocumentStyle = defaults.object(forKey: Key.useDocumentStyle.rawValue) as? Bool ?? true
         defaultZoom = defaults.object(forKey: Key.defaultZoom.rawValue) as? Double ?? 0
     }
