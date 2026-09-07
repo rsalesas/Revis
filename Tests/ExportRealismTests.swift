@@ -68,13 +68,51 @@ struct ExportRealismTests {
     }
 
     @Test func writeARealisticReviewForTestingAgainstAModel() throws {
+        let file = try Self.realisticFile()
+        let directory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("build")
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        try ReviewExport.markdown(file).write(
+            to: directory.appendingPathComponent("model-test-review.md"),
+            atomically: true, encoding: .utf8)
+        try ReviewExport.json(file).write(
+            to: directory.appendingPathComponent("model-test-review.json"),
+            atomically: true, encoding: .utf8)
+    }
+
+    /// The annotations, so the reply fixture can be planned against the very review it was
+    /// written in answer to.
+    static func realisticAnnotations() throws -> [Annotation] {
+        try realisticFile().annotations
+    }
+
+    static func realisticFile() throws -> ReviewFile {
         let html = Self.fixture("data-retention-spec.html")
         let text = Self.plainText(html)
         let prepared = DocumentPrep.prepare(html: html, baseURL: nil)
 
+        // LITERAL ids, not fresh ones, and this is what makes the round trip testable at
+        // all. `Tests/Fixtures/model-reply.md` is a real model's answer to this exact
+        // review, committed as it arrived — and it names these items by id. Generate new
+        // UUIDs here and that fixture matches nothing on the next run, silently, because an
+        // unmatched reply is a reported condition rather than a failure.
+        var ids = [
+            UUID(uuidString: "c52818a0-988f-441a-ae7e-d169cb1dabc1")!,  // 1  ninety days
+            UUID(uuidString: "866e2d08-856a-4982-bca5-fc87a9547dd7")!,  // 2  worker log
+            UUID(uuidString: "090a1529-f090-4ece-8ea3-4d6fd3b1eb8e")!,  // 3  the callout
+            UUID(uuidString: "893efbbe-78e7-41ef-aac3-b48d80dbb3f1")!,  // 4  the question
+            UUID(uuidString: "c1d51bf7-6269-4621-b5c6-4127cc4c5ae0")!,  // 5  the comment
+            UUID(uuidString: "7fd488bb-f631-475e-83de-9159b55d662f")!,  // 6  the region
+            UUID(uuidString: "b07a7832-08bf-4608-aaee-88133bf8fbc4")!,  // 7  declined
+            UUID(uuidString: "0b10dfa0-1c19-4909-a0e9-34f1f33f8670")!,  // 8  argued-with
+            UUID(uuidString: "bfccc5f9-c4dc-49a1-bab5-bf34ba92f138")!,  // 9  the insert
+        ].makeIterator()
+
         func note(_ intent: Intent, _ instruction: String, _ anchor: Anchor) -> Annotation {
-            Annotation(author: "Robert Salesas", intent: intent, note: instruction,
-                       anchor: anchor)
+            Annotation(id: ids.next() ?? UUID(), author: "Robert Salesas", intent: intent,
+                       note: instruction, anchor: anchor)
         }
 
         var annotations: [Annotation] = [
@@ -186,18 +224,7 @@ struct ExportRealismTests {
             #expect(text.contains(annotation.anchor.quote),
                     "anchor not found in the document: \(annotation.anchor.quote)")
         }
-
-        let directory = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("build")
-        try? FileManager.default.createDirectory(at: directory,
-                                                 withIntermediateDirectories: true)
-        try ReviewExport.markdown(file).write(
-            to: directory.appendingPathComponent("model-test-review.md"),
-            atomically: true, encoding: .utf8)
-        try ReviewExport.json(file).write(
-            to: directory.appendingPathComponent("model-test-review.json"),
-            atomically: true, encoding: .utf8)
+        return file
     }
 }
 
@@ -247,5 +274,58 @@ struct IntentSpecimenTests {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try JSONEncoder.revis.encode(file).write(
             to: directory.appendingPathComponent("all-intents.revis"))
+    }
+}
+
+/// A real model's real reply document, kept as a fixture.
+///
+/// The manual half of this cannot be automated and should be repeated whenever the export's
+/// wording changes: hand a model the sample HTML and `build/model-test-review.md` with one
+/// flat instruction — *"Apply this review to the document"* — and nothing else. Deliberately
+/// NOT "apply this review and write a reply document": the whole question is whether the
+/// export's own words are enough, and a prompt that repeats them tests the prompt.
+///
+/// What came back is committed exactly as it arrived. A reply document tidied by hand
+/// proves the parser reads tidy files, which was never in doubt.
+struct ModelReplyFixtureTests {
+
+    private static func fixture(_ name: String) -> String {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().appendingPathComponent("Fixtures")
+            .appendingPathComponent(name)
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    }
+
+    @Test func aRealModelsReplyDocumentReadsCleanly() throws {
+        let reading = ReplyImport.read(Self.fixture("model-reply.md"))
+        #expect(reading.problems.isEmpty, "problems: \(reading.problems)")
+        #expect(reading.replies.count == 5)
+        // It named itself, so the importer does not have to guess.
+        #expect(reading.replies.allSatisfy { $0.author == "Claude" })
+    }
+
+    /// And every id in it is one this review actually contains.
+    ///
+    /// The ids in `ExportRealismTests` are literals for exactly this reason. If they ever
+    /// go back to being freshly generated, this is the test that says so — otherwise the
+    /// fixture would quietly match nothing, because an unmatched reply is a reported
+    /// condition and not a failure.
+    @Test func everyReplyInItLandsOnAnItemOfThisReview() throws {
+        let annotations = try ExportRealismTests.realisticAnnotations()
+        var working = annotations
+        let landings = ReplyImport.plan(ReplyImport.read(Self.fixture("model-reply.md")),
+                                        against: working)
+        let result = ReplyImport.attach(landings, to: &working, signedBy: "Assistant")
+        #expect(result.unmatched.isEmpty,
+                "named ids this review does not have: \(result.unmatched.map(\.rawID))")
+        #expect(result.attached == 5)
+        // It answered the question — the item that, before any of this existed, had
+        // nowhere to put an answer. It had no thread before the import, so what is there
+        // now arrived from the document, and arrived marked as a machine's whatever the
+        // document said about itself.
+        let question = working.first { $0.intent == .question }
+        #expect(question?.replies.count == 1)
+        #expect(question?.replies.first?.isAssistant == true)
+        #expect(question?.replies.first?.author == "Claude")
     }
 }
