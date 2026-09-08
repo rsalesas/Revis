@@ -617,6 +617,14 @@ enum LargeDocument {
         }
 
         return ReviewFile(
+            // Pinned, not left to default to the running build. `ReviewFile.app` records
+            // which build wrote a review, which is right for a real one and wrong for
+            // this: the file is COMMITTED, and the default made it change with every
+            // version bump. That broke the byte-identical claim this whole fixture rests
+            // on, and it broke it exactly where it hurts — `release.sh` bumps the version,
+            // then runs the suite, which rewrites this file and leaves the tree dirty, so
+            // the NEXT release refuses to start. It shipped that way once.
+            app: "Revis (generated sample)",
             source: SourceInfo(name: "large-spec.html", path: nil,
                                capturedAt: Date(timeIntervalSince1970: 1_788_690_000),
                                digest: SourceInfo.digest(of: Data(document.html.utf8))),
