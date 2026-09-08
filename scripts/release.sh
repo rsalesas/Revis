@@ -256,7 +256,7 @@ echo "✓ Helper re-signed, app re-sealed"
 # ships is what was signed, and the two have disagreed before: a config that names the
 # wrong entitlements file builds and signs perfectly happily.
 #
-# These assertions were the opposite way round until 0.2.0. Revis shipped sandboxed
+# These assertions were the opposite way round until 0.3.0. Revis shipped sandboxed
 # with no network entitlement at all, and the release refused to go out otherwise. The
 # in-app updater is what changed it: a sandboxed app cannot replace itself in
 # /Applications, so an in-place update could only ever be refused at its last step.

@@ -60,7 +60,7 @@ targets:
           CODE_SIGN_ENTITLEMENTS: Revis/Revis.Debug.entitlements
           UPDATER_ENTITLEMENTS: Updater/revis-updater.Debug.entitlements
         release:
-          # Release is un-sandboxed too, since 0.2.0. The in-app updater cannot
+          # Release is un-sandboxed too, since 0.3.0. The in-app updater cannot
           # replace the app in /Applications from inside a container; the file
           # itself records the whole reasoning.
           CODE_SIGN_ENTITLEMENTS: Revis/Revis.DeveloperID.entitlements
