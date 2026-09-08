@@ -36,6 +36,18 @@ struct PreparedDocument: Codable, Equatable, Sendable {
     /// of its own JSON. The same trap is written up at length in `Annotation.init(from:)`.
     var markdown: MarkdownSource?
 
+    /// The page background the document's own stylesheet declares, if it declares one.
+    ///
+    /// **Optional, and for two reasons that happen to agree.** The decoder trap above
+    /// applies — a non-optional field added to this type makes every review already on
+    /// disk reopen empty. And nil is also the honest value: most documents declare no page
+    /// background at all, and those get paper white, exactly as before.
+    ///
+    /// Stored rather than recomputed on the way to the page because it is a property of
+    /// the document, it is written into the review beside the CSS it came from, and a
+    /// review reopened in a year should be drawn on the paper it was marked up on.
+    var pageBackground: String?
+
     /// Whether the document brought a stylesheet of its own.
     ///
     /// Asked in two places — the model, to decide whether the appearance switch is a real
@@ -47,7 +59,7 @@ struct PreparedDocument: Codable, Equatable, Sendable {
 
     static let empty = PreparedDocument(body: "", css: "", title: nil,
                                         report: SanitizationReport(), missingImages: [],
-                                        markdown: nil)
+                                        markdown: nil, pageBackground: nil)
 }
 
 /// Takes raw HTML off the disk and turns it into something the review window can show.
@@ -80,7 +92,8 @@ enum DocumentPrep {
         var missing: [String] = []
         let body = inlineImages(in: clean.body, baseURL: baseURL, missing: &missing)
         return PreparedDocument(body: body, css: clean.css, title: clean.title,
-                                report: clean.report, missingImages: missing, markdown: nil)
+                                report: clean.report, missingImages: missing, markdown: nil,
+                                pageBackground: PageBackground.declared(in: clean.css))
     }
 
     /// Prepare a Markdown document: render it, then treat the result exactly as any other

@@ -140,7 +140,50 @@
       return parts.join(" › ");
     }
 
-    post("ready", { blocks: blocks.length, outline: outline });
+    /* The sheet's RESOLVED background, for Swift to decide what the chrome must do.
+       Reported rather than decided here: the document's declared value can be a
+       `var()` chain ending in `oklch()`, which the browser has already resolved by now
+       and which Swift would otherwise need a colour converter to read. Measuring is the
+       page's job; what it means is not — see `PageBackground.isDark`. */
+    var sheet = document.getElementById("rv-sheet");
+    post("ready", { blocks: blocks.length, outline: outline,
+                    paper: sheet ? resolveColour(getComputedStyle(sheet).backgroundColor) : "" });
+  }
+
+  /* A computed colour as plain sRGB bytes, whatever syntax it was written in.
+   *
+   * `getComputedStyle().backgroundColor` does NOT normalise to `rgb()`: WebKit serialises
+   * a colour in the space it was authored in, so a document whose canvas is
+   * `oklch(0.26 0.087 260)` reports exactly that string back. Swift read it, failed to
+   * parse it, and correctly declined to guess — which presented as a dark document being
+   * treated as light paper, with every wash still mixed for white.
+   *
+   * Converting it here rather than in Swift, because the browser already owns a complete
+   * colour engine and Swift would need an OKLab matrix to answer a question WebKit answers
+   * for free — and would need another one the day a document arrives in `lab()` or
+   * `color(display-p3 …)`. A one-pixel fill goes through the same code path the page is
+   * painted with, so whatever CSS grows next is already handled.
+   *
+   * `getImageData` is UNpremultiplied, so the alpha comes back beside the colour rather
+   * than mixed into it — which matters, because a see-through sheet is showing the desk
+   * and is not an answer about the document at all. Swift decides that; this only reads.
+   *
+   * Falls back to the raw string, which Swift can still parse when it is already `rgb()`. */
+  function resolveColour(value) {
+    if (!value) return "";
+    try {
+      var canvas = document.createElement("canvas");
+      canvas.width = 1; canvas.height = 1;
+      var ctx = canvas.getContext("2d");
+      if (!ctx) return value;
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = value;
+      ctx.fillRect(0, 0, 1, 1);
+      var d = ctx.getImageData(0, 0, 1, 1).data;
+      return "rgba(" + d[0] + ", " + d[1] + ", " + d[2] + ", " + (d[3] / 255) + ")";
+    } catch (e) {
+      return value;
+    }
   }
 
   /* A mouse event's position in the page's OWN coordinate space.
@@ -659,6 +702,18 @@
    * the reviewer, so the desk is told. */
   window.rvSetDesk = function (dark) {
     document.documentElement.setAttribute("data-rv-desk", dark ? "dark" : "light");
+  };
+
+  /* Whether the PAPER is dark — which is a different question from the desk above, and
+   * is asked because the document now paints the sheet (see `DocumentShell.sheetPaint`).
+   * Every wash, rule and tint in `review.css` was mixed over white; on a dark ground a
+   * 26%-alpha highlight is not a mark, it is a smudge.
+   *
+   * Told by Swift for the same reason the desk is: the page measured its own background
+   * and reported it, Swift decided what it means, and the answer comes back here. The
+   * page is not allowed a second opinion about it. */
+  window.rvSetPaper = function (dark) {
+    document.documentElement.setAttribute("data-rv-paper", dark ? "dark" : "light");
   };
 
   window.rvSetTool = function (name) {

@@ -339,6 +339,19 @@ stylesheet aside for a plain reading style, for documents that arrive genuinely 
 read. It is loud about being on: what you are looking at then is *not* how the document
 looks.
 
+**The paper is the document's own.** A document that declares a page background is drawn on
+it, and a dark document is drawn dark. This is not a theme: the app has no dark mode for
+the document and never follows the reviewer's. It was the other way round until recently —
+the sheet was paper-white always — and the asymmetry that hid in that was the app honouring
+a document's ink and overriding its paper. Invisible for a document designed light, since
+both are white. Fatal for one designed dark: the author's near-white text, faithfully
+applied, on our white page. Being unable to read it is being unable to review it, and the
+reading style above was the only way out.
+
+The mark washes, rules and tints are all mixed for the paper they land on, which the app is
+told after the page reports what its background actually resolved to. Only the chrome
+changes; nothing restates a colour the document chose.
+
 ## Licence
 
 Source-available, not open source. Revis is under the

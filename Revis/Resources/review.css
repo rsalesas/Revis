@@ -377,6 +377,75 @@ html[data-rv-tool="region"] #rv-sheet {
    draws one, and the live selection never does. */
 ::highlight(rv-current)  { text-decoration: underline 2.5px rgba(0, 0, 0, 0.72); }
 
+/* --------------------------------------------------------------- dark paper */
+
+/* Everything above this line was mixed over white, because until the document was allowed
+ * to paint the sheet the paper was always white. It is not any more: a document that
+ * declares its own page background gets it (see `DocumentShell.sheetPaint`), and on a dark
+ * ground a 26%-alpha wash is not a mark, it is a smudge.
+ *
+ * Told by Swift, never asked for here. The page measures its own resolved background and
+ * reports it; `PageBackground.isDark` decides what that means and pushes the answer back
+ * through `rvSetPaper`. Same rule as the desk and the intent colours — one source, two
+ * readers — and the reason it cannot be a media query is the same too: the web view is
+ * pinned to a light appearance so the GUEST resolves its light palette, so
+ * `prefers-color-scheme` in here would read the pin rather than the paper.
+ *
+ * Only the chrome is restated. Nothing in here touches a colour the DOCUMENT chose: the
+ * whole point of letting the sheet go dark was to stop overriding what the author wrote. */
+
+html[data-rv-paper="dark"] {
+  --rv-ink: #f2f2f7;
+  --rv-rule: rgba(255, 255, 255, 0.16);
+  --rv-shadow: rgba(0, 0, 0, 0.45);
+}
+
+/* Where the paper ENDS, said with a hairline rather than left to the shadow.
+   A drop shadow is dark, and a dark shadow under dark paper on a dark desk separates
+   nothing — worst of all for a document whose canvas happens to be near the desk's own
+   grey, where the sheet simply dissolves into the window. The shadow stays for the lift;
+   this draws the edge. Furniture, like the shadow it sits beside: it says where the page
+   is, and it is not a colour the document chose. */
+html[data-rv-paper="dark"] #rv-sheet {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.10),
+              0 1px 3px var(--rv-shadow), 0 12px 32px var(--rv-shadow);
+}
+
+/* The `:where()` defaults, restated. These only ever apply where the document expressed no
+   opinion — a document that paints its own tables never reaches them — but a document can
+   perfectly well declare a dark page and leave its tables to us. */
+html[data-rv-paper="dark"] :where(#rv-doc blockquote) { color: rgba(255, 255, 255, 0.70); }
+html[data-rv-paper="dark"] :where(#rv-doc pre) { background: rgba(255, 255, 255, 0.07); }
+html[data-rv-paper="dark"] :where(#rv-doc th) { background: rgba(255, 255, 255, 0.06); }
+html[data-rv-paper="dark"] #rv-doc img.rv-missing,
+html[data-rv-paper="dark"] #rv-doc img[data-rv-missing] { background: rgba(255, 255, 255, 0.05); }
+html[data-rv-paper="dark"] #rv-doc img[data-rv-missing]::after { color: rgba(255, 255, 255, 0.5); }
+
+/* The live selection has to stay brighter than every annotation wash below it, which is
+   the one distinction this stylesheet says must always hold. */
+html[data-rv-paper="dark"] #rv-doc::selection,
+html[data-rv-paper="dark"] #rv-doc *::selection { background: rgba(90, 160, 255, 0.42); }
+html[data-rv-paper="dark"] .rv-drag {
+  border-color: rgba(120, 175, 255, 0.9);
+  background: rgba(120, 175, 255, 0.16);
+}
+
+/* The washes, at the alpha they need to read as a wash rather than as dirt. The hues are
+   the palette's own and are unchanged — a mark's colour is what says which KIND of mark it
+   is, and a page of them has to sort into intents at a glance on either paper. */
+html[data-rv-paper="dark"] ::highlight(rv-change)   { background-color: rgba(224, 160, 58, 0.42); }
+html[data-rv-paper="dark"] ::highlight(rv-insert)   { background-color: rgba(77, 158, 151, 0.42); }
+html[data-rv-paper="dark"] ::highlight(rv-remove)   { background-color: rgba(212, 112, 79, 0.42); }
+html[data-rv-paper="dark"] ::highlight(rv-move)     { background-color: rgba(142, 123, 196, 0.42); }
+html[data-rv-paper="dark"] ::highlight(rv-question) { background-color: rgba(91, 143, 196, 0.40); }
+html[data-rv-paper="dark"] ::highlight(rv-approve)  { background-color: rgba(138, 163, 91, 0.40); }
+html[data-rv-paper="dark"] ::highlight(rv-note)     { background-color: rgba(154, 154, 158, 0.34); }
+/* The chosen one is an ink underline, and ink on dark paper is light. Without this the
+   one mark you are actually reading is the only one you cannot see. */
+html[data-rv-paper="dark"] ::highlight(rv-current)  {
+  text-decoration: underline 2.5px rgba(255, 255, 255, 0.85);
+}
+
 /* ------------------------------------------------------------------- regions */
 
 #rv-regions {

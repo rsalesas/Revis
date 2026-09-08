@@ -54,6 +54,18 @@ Both have a bug behind them; do not relax either.
   must be the same string, checked against Apex itself. If you touch the scanner, run it —
   and remember that a construct's handling has to be gated on the same option Apex was
   given, or the shadow reads a `[^1]` the page rendered as literal text.
+- `Document/PageBackground.swift` — what colour the document says its page is, and
+  whether that is a dark one. It exists because the sheet was paper-white always, which
+  made the app honour a document's ink and override its paper: invisible for a document
+  designed light, fatal for one designed dark. Two rules to keep. Only TOP-LEVEL
+  `html`/`body`/`:root` rules count — a `@media (prefers-color-scheme: dark)` branch is not
+  what renders, because the web view is pinned light so the guest resolves its light
+  palette. And the value is handed on UNRESOLVED: the browser converts it and reports back,
+  because `getComputedStyle` does not normalise to `rgb()` — a document authored in
+  `oklch()` reports `oklch()`, and resolving that in Swift means an OKLab matrix to answer
+  what WebKit answers for free. `resolveColour` in review.js fills a one-pixel canvas and
+  reads the bytes, so `lab()` and `color(display-p3 …)` are already handled. Swift decides
+  what the answer MEANS — `data-rv-paper`, pushed like `rvSetDesk`, one source two readers.
 - `Document/HTMLSanitizer.swift` — the tokenizer. The one place where being wrong is a
   security bug. It is a denylist over elements and an allowlist over attributes; keep it
   that way, and add a test to `Tests/SanitizerTests.swift` for anything you change.

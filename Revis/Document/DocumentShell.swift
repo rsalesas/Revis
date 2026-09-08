@@ -76,6 +76,7 @@ enum DocumentShell {
         <style>
         \(useDocumentCSS ? prepared.css : "")
         </style>
+        \(sheetPaint(for: prepared, useDocumentCSS: useDocumentCSS))
         </head>
         <body class="\(bodyClass(for: prepared, useDocumentCSS: useDocumentCSS, fitting: fitting))">
         <div id="rv-page">
@@ -90,6 +91,24 @@ enum DocumentShell {
         </body>
         </html>
         """
+    }
+
+    /// The sheet takes the colour the document says its page is.
+    ///
+    /// Third stylesheet, and it has to be third. `#rv-sheet` is an id in both the chrome
+    /// and here, so the two rules tie on specificity and source order is what settles it —
+    /// and being after the document's own CSS is also what lets the value resolve, since a
+    /// `var(--canvas)` is defined on `:root` in the stylesheet immediately above.
+    ///
+    /// This is the fix for the asymmetry `PageBackground` describes: the document's ink was
+    /// honoured and its paper was not, which is invisible for a document designed light and
+    /// fatal for one designed dark. Emitted only with the document's own stylesheet on — in
+    /// the reading style there is no document CSS on the page, so there is no colour to
+    /// take and nothing to be inconsistent with.
+    private static func sheetPaint(for prepared: PreparedDocument,
+                                   useDocumentCSS: Bool) -> String {
+        guard useDocumentCSS, let background = prepared.pageBackground else { return "" }
+        return "<style>\n#rv-sheet { background: \(background); }\n</style>"
     }
 
     /// Which of the three the page is in.

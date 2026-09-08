@@ -284,6 +284,14 @@ struct DocumentWebView: NSViewRepresentable {
                 // already loaded; that is nothing next to being unable to tell which of
                 // five things broke.
                 run("window.rvSetDesk && window.rvSetDesk(\(pendingDeskIsDark));")
+                // Before the colours and before the marks: the document paints the sheet
+                // now, and every wash in `review.css` was mixed over white. The page
+                // reported what its paper actually resolved to; what that means is decided
+                // here. Unreadable or absent answers leave it light, which is what the
+                // chrome has always assumed — an unrecognised colour must not be a guess.
+                let paperIsDark = (dict["paper"] as? String).flatMap(PageBackground.isDark) ?? false
+                PageLog.write("paper \(dict["paper"] ?? "?") -> dark=\(paperIsDark)")
+                run("window.rvSetPaper && window.rvSetPaper(\(paperIsDark));")
                 run("window.rvSetColours && window.rvSetColours(\(AnnotationPalette.json()),"
                     + " \(AnnotationSymbols.json()));")
                 run("window.rvSetZoom && window.rvSetZoom(\(pendingZoom));")
