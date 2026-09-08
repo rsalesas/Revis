@@ -153,7 +153,7 @@ them is trusted to be the only one:
 | **Sanitizer** | A hand-written tokenizer — not a regular expression — strips every script (contents included), every `on…` attribute, every frame, object and form control, and every URL whose scheme can execute. Runs before a byte reaches WebKit. |
 | **Content Security Policy** | The page is served under `default-src 'none'` with `script-src 'none'`, no `connect-src`, `form-action 'none'`, `base-uri 'none'`. A script that survived the sanitizer still cannot run. |
 | **Isolated content world** | The review runtime is injected as a user script into its own `WKContentWorld`, which is exempt from the page's CSP — which is precisely what lets that CSP be absolute. Page script, if any existed, could not see or forge the bridge. |
-| **Process** | Navigation delegate cancels everything after the initial load; non-persistent data store; release builds ship **without** the network entitlement. |
+| **Process** | Navigation delegate cancels everything after the initial load; non-persistent data store; the web view is never told about a proxy, a cookie jar or a cache that outlives the window. |
 
 A Markdown document is refused four of Apex's abilities outright, and they are not
 settings: file includes, bibliographies and concordances all read files at paths the
@@ -168,6 +168,23 @@ escapes the folder is refused rather than read.
 Whatever had to be removed from a given document is reported in that window's inspector. An
 app that rewrites a file before showing it owes the reviewer that much.
 
+### What the app itself is allowed to do
+
+Revis is **not** sandboxed, and it holds exactly one entitlement:
+`com.apple.security.network.client`. Both of those are recent, and both are the price of
+the in-app updater — a sandboxed app cannot replace itself in `/Applications`, so an
+in-place update can only ever be refused at its very last step. It shipped the other way
+round first, and the reasoning for the change is written out in
+`Revis/Revis.DeveloperID.entitlements` rather than summarised here.
+
+What that entitlement is for is the whole of it: reading `appcast.json` from the releases
+page, and downloading the archive it names. There is no telemetry, no crash reporter, no
+document ever leaves this machine, and the four layers above are what stand between the
+network and a page — none of which the sandbox was doing. `scripts/release.sh` refuses to
+publish a build that is sandboxed, that carries any entitlement beyond this one, or whose
+bundled updater helper is missing.
+
+
 ## Two things worth knowing
 
 **A review holds a snapshot of the document.** Not a pointer to it. Every anchor is measured
@@ -181,6 +198,56 @@ saving asks where to put the `.revis`. This is enforced twice — the window det
 source URL on import, and the writer refuses any content type but `.revis` — because AppKit
 autosaves a document back to where it came from, and the first run of this app against a
 real document destroyed it. See `SourceDetachment`.
+
+## Installing
+
+Download the disk image from
+[Releases](https://github.com/rsalesas/Revis/releases/latest) and drag `Revis.app` onto
+the Applications folder beside it. The disk image and the app inside it are each signed
+with a Developer ID certificate, notarized, and carry their own stapled ticket — so
+neither needs to reach Apple at first launch, and neither wants a right-click.
+
+Install it into `/Applications` rather than running it out of the mounted image. Revis
+says so if you try: a copy running from a read-only volume cannot replace itself, so it
+would be a copy that never updates.
+
+### Updating
+
+Revis checks once a day for a newer build and offers it on a bar across the top of the
+window; *Revis ▸ Check for Updates…* asks straight away, and Settings turns the automatic
+check off. The check reads one small JSON file from the releases page and sends nothing —
+not the document, not a version, not an identifier of any kind. It is an HTTP GET.
+
+Choosing to update downloads a ZIP of the same build and installs it in place, and the app
+relaunches into the new version. Doing that ourselves *bypasses* the Gatekeeper check the
+user would have got from a fresh download, so the updater has to do Gatekeeper's job
+before anything is run:
+
+- the archive's SHA-256 must match the one published in the manifest,
+- the app inside must satisfy a code-signing requirement pinned to **this** Developer ID
+  chain — team alone is not enough, since a development build carries the same team — and
+- it must be strictly newer than the running copy, so a replayed or rolled-back manifest
+  cannot walk anyone backwards.
+
+Any of those failing leaves the installed copy untouched and the download route intact.
+Only the last step is irreversible, and by then all three have passed. The swap itself is
+one `replaceItemAt` performed by a small helper outside the bundle — a bundle cannot
+replace itself while its own code is mapped — which waits for the app to exit and starts
+the new copy. See `Revis/Update/AppUpdater.swift` and `Updater/`.
+
+## Releasing
+
+```bash
+./scripts/release.sh --dry-run     # build, sign and verify; nothing leaves the Mac
+./scripts/release.sh --notes "…"   # the real thing
+```
+
+One command produces and publishes all four assets: the disk image a person downloads, the
+ZIP the updater installs, `appcast.json` the updater reads, and a copy of the image under
+a stable name. The ordering inside it is load-bearing and is written up at the top of the
+script — the app is notarized and stapled *before* the disk image is built around it,
+because a ticket on the image says nothing about the app inside, and the result is
+verified by mounting the finished image and looking.
 
 ## Trying it on something
 

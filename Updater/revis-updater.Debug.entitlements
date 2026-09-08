@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Let the debugger attach. This key also keeps the dict non-empty: Xcode
+	     rewrites a comment-only entitlements plist mid-build, then fails the build
+	     complaining the file "was modified during the build". -->
+	<key>com.apple.security.get-task-allow</key>
+	<true/>
+</dict>
+</plist>

@@ -9,6 +9,20 @@ struct RevisCommands: Commands {
     @FocusedValue(\.activeReview) private var review
 
     var body: some Commands {
+        // Under "About Revis", where every Mac app that updates itself puts it. Reached
+        // through the shared state rather than `@FocusedValue` — unlike everything else in
+        // here, this command is about the app and not about a document, and it has to work
+        // with no window open at all.
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") {
+                Task {
+                    let checker = AppState.shared.updateChecker
+                    await checker.check()
+                    UpdateAlert.present(for: checker)
+                }
+            }
+        }
+
         // A review app has no use for the standard New Item group beyond New, and a
         // document that cannot be typed into has no use for the pasteboard's replace
         // commands. What it does need is a way to make a mark.

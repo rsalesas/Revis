@@ -57,6 +57,19 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Look for a newer build on the releases page, once a day.
+    @Published var checkForUpdates: Bool { didSet { save(.checkForUpdates, checkForUpdates) } }
+
+    /// When the last automatic check ran, so it can be throttled to once a day. Not
+    /// `@Published`: it changes during a check and nothing renders from it.
+    var lastUpdateCheck: Date? {
+        get {
+            let t = defaults.double(forKey: Key.lastUpdateCheck.rawValue)
+            return t > 0 ? Date(timeIntervalSince1970: t) : nil
+        }
+        set { defaults.set(newValue?.timeIntervalSince1970 ?? 0, forKey: Key.lastUpdateCheck.rawValue) }
+    }
+
     /// Who imported replies are signed as when the document did not say. Remembered
     /// because it is the same assistant most of the time and retyping it every import is a
     /// question already answered.
@@ -83,6 +96,7 @@ final class AppSettings: ObservableObject {
         case markdownDefaults
         case useDocumentStyle, defaultZoom
         case annotationsVisible, inspectorVisible
+        case checkForUpdates, lastUpdateCheck
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -100,6 +114,7 @@ final class AppSettings: ObservableObject {
             .flatMap { try? JSONDecoder().decode(MarkdownOptions.self, from: $0) })
             ?? .default
         defaultZoom = defaults.object(forKey: Key.defaultZoom.rawValue) as? Double ?? 0
+        checkForUpdates = defaults.object(forKey: Key.checkForUpdates.rawValue) as? Bool ?? true
     }
 
     private func save(_ key: Key, _ value: Any) {

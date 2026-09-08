@@ -2,20 +2,35 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<key>com.apple.security.files.user-selected.read-write</key>
-	<true/>
 	<!--
-	  Reopening a review re-reads the images the document referenced, so the
-	  folder it was opened from has to survive a relaunch.
+	  NOT sandboxed, and that is a decision rather than an omission.
+
+	  Revis shipped sandboxed for its first releases, with no network entitlement
+	  at all, and both facts were asserted by scripts/release.sh. What bought them
+	  back was the in-app updater: a sandboxed app cannot replace itself in
+	  /Applications — `isWritableFile` answers false from inside a container and
+	  the write fails with NSFileWriteNoPermissionError — so an in-place update can
+	  only ever be refused at its very last step. Vaelora next door hit exactly
+	  this and dropped its sandbox for the same reason; see AppUpdater.
+
+	  So the containment that mattered stayed and moved DOWN, to where the
+	  untrusted thing actually is. The document is still made inert by the
+	  sanitizer before a byte reaches WebKit, still served under `default-src
+	  'none'` with `script-src 'none'` and no `connect-src`, still rendered in a
+	  non-persistent data store by a navigation delegate that cancels every load
+	  after the first, and the review runtime still lives in its own
+	  WKContentWorld. A page that cannot fetch, navigate, or run script does not
+	  reach this entitlement whatever the app is allowed to do. What the sandbox
+	  was covering here was the app's own bugs, not the page's — and it was
+	  covering them at the price of never being able to ship a fix automatically.
 	-->
-	<key>com.apple.security.files.bookmarks.app-scope</key>
-	<true/>
+
 	<!--
-	  Deliberately NO network entitlement. The document being reviewed is
-	  untrusted HTML; the app it is rendered in should not be able to reach the
-	  network at all, whatever the page manages to ask for.
+	  Outbound only, and used in exactly two places: reading the update manifest
+	  and downloading the archive named in it (UpdateChecker, AppUpdater). There is
+	  no server side to this app.
 	-->
+	<key>com.apple.security.network.client</key>
+	<true/>
 </dict>
 </plist>

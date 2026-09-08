@@ -90,6 +90,70 @@ added to `PreparedDocument` as an **Optional** — Optionals are the one kind th
 decoder tolerates missing. Anything non-optional added to either of those needs a
 hand-written `init(from:)` first.
 
+## The updater, and what it cost
+
+Revis used to ship **sandboxed with no network entitlement**, and `release.sh` refused to
+publish a build that was anything else. Both of those are gone, deliberately, and the
+trade is the thing to understand before touching any of it: a sandboxed app cannot replace
+itself in `/Applications` — from inside a container `isWritableFile` answers false and the
+write fails with `NSFileWriteNoPermissionError` — so an in-place update can only ever be
+refused at its very last step. Vaelora hit exactly this and dropped its sandbox for the
+same reason.
+
+What replaced it is *not* nothing, and it is written out in
+`Revis/Revis.DeveloperID.entitlements`. The containment that mattered was always below the
+sandbox: the sanitizer, the CSP, the isolated content world, the navigation delegate. The
+app now holds one entitlement, `com.apple.security.network.client`, and `release.sh`
+asserts on the **signed bundle** that it is not sandboxed, that it holds that entitlement,
+and that it holds *nothing else* — the last of those because the README makes the claim to
+a reader and a claim that can be checked should be.
+
+- `Revis/Update/UpdateChecker.swift` — the manifest, and what a fetched one means. Fails
+  closed everywhere: an unparseable version, a 404, a build needing a newer macOS all end
+  as "up to date" or a reported failure, never as an offer. `URLSession` does not throw on
+  an HTTP error status, so the status is checked by hand — without it a captive portal's
+  login page goes to the JSON decoder.
+- `Revis/Update/AppUpdater.swift` — installing one. Doing the swap ourselves bypasses the
+  Gatekeeper check a fresh download would get, so this has to do Gatekeeper's job:
+  SHA-256 against the manifest, a code-signing requirement pinned to the Developer ID
+  **chain** (team alone accepts our own Debug builds — a test caught that), and strictly
+  newer than the running copy. Everything before the hand-off is reversible.
+- `Updater/` — the `revis-updater` helper, its own `tool` target. It exists because a
+  bundle cannot replace itself while its own code is mapped. Two traps live in its target
+  settings and are commented there: `SKIP_INSTALL` (without it the archive holds two
+  installed products and *every* distribution method is rejected), and a module name that
+  must not near-miss the app's on case-insensitive APFS.
+- `Revis/Update/SemanticVersion.swift` — not `AppVersion`, which is taken by "what am I".
+  A type with tests rather than an inline `<`, because `"0.2.10" < "0.2.9"` is true.
+
+## Releasing
+
+`./scripts/release.sh` builds and publishes four assets in one act: the DMG, the updater's
+ZIP, `appcast.json`, and a copy of the DMG under a stable name. `--dry-run` stops after
+signing and verifying, with nothing having left the Mac.
+
+Two orderings in it are load-bearing, and both are guarded on the artifact rather than on
+the sequence that produced it:
+
+1. **The app is notarized and stapled BEFORE the DMG is built around it**, and the DMG is
+   then notarized and stapled itself. A ticket on the disk image says nothing about the app
+   inside it, and an app without its own ticket can only prove it was notarized by asking
+   Apple at first launch — which stalls offline or behind a captive portal. The finished
+   image is mounted again and the app inside it validated, because Vaelora shipped this bug
+   for many releases with every step reporting success.
+2. **The helper is re-signed with a real timestamp after export**, and the app re-sealed
+   around it. The post-build script signs it `--timestamp=none` to keep Debug builds
+   offline and fast; the notary service will not accept that.
+
+The manifest points at the **immutable per-tag** URLs, never `releases/latest/` — a client
+holding a checksum must not have the bytes swapped underneath it. The one thing that reads
+`latest` is the manifest URL itself, which is how GitHub serves a stable address for the
+newest release. `UpdateTests` guards that seam from the Swift side: it reads `release.sh`
+out of the source tree and checks the keys it writes against what `UpdateManifest`
+decodes, and that both files name the same repository. Nothing else would catch a drift —
+an unreadable manifest is a failed check, and a failed check looks exactly like being up
+to date.
+
 ## Debugging the page
 
 There is no console to open on a `WKWebView` inside an app, which makes a drawing failure

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Deliberately empty, and that is the point: the helper needs no entitlement
+	     to do its one job. It waits for a pid to exit and calls replaceItemAt on a
+	     directory the app has already established it can write. Hardened runtime,
+	     no App Sandbox, nothing else.
+
+	     Applied by scripts/release.sh, which re-signs this binary WITH a secure
+	     timestamp after the Developer ID export and before notarization — the
+	     app's post-build script signs it with --timestamp=none to keep Debug
+	     builds offline and fast, and the notary service will not accept that.
+
+	     Only ever handed to `codesign`, which accepts an empty dict; Xcode's own
+	     build-time entitlements processing never sees this file. -->
+</dict>
+</plist>

@@ -82,6 +82,18 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            Section {
+                Toggle("Check for updates automatically", isOn: $appSettings.checkForUpdates)
+                Text("Once a day, Revis reads a small file from its releases page to see"
+                     + " whether a newer version has been published, and offers it on a bar"
+                     + " across the top of the window. Nothing about the document you are"
+                     + " reviewing is sent anywhere. Turn this off and “Check for Updates…”"
+                     + " in the Revis menu still works.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .formStyle(.grouped)
     }

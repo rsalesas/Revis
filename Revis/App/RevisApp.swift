@@ -34,4 +34,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a review app with no windows and no document should offer the open panel rather
     /// than sitting there with an empty Dock icon.
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { true }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Before the update check, not after: a copy running from the mounted disk image
+        // cannot install anything, and offering it an update it will refuse at the last
+        // step is worse than saying so now.
+        RunLocationGuard.enforce()
+        // Throttled to once a day, and skipped entirely when the preference is off.
+        Task { @MainActor in await AppState.shared.updateChecker.checkIfDue() }
+    }
 }

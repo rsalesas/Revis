@@ -24,6 +24,11 @@ struct ReviewView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Above the split, for the same reason the status bar is below it: an update
+            // is about the app, not about this document, so it spans the window rather
+            // than stopping at the document pane's edge. Shown even on an empty window —
+            // that is the one you are looking at when you have just launched.
+            UpdateBanner(checker: appState.updateChecker)
             content
             // Below the split rather than inside it: the bar is about the window, and one
             // that sat inside the document pane would stop at the annotations pane's edge

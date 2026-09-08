@@ -41,6 +41,11 @@ targets:
     dependencies:
       - package: Apex
         product: ApexC
+      # Build-order only: the helper is a tool, so it must not be linked or
+      # embedded — the post-build script copies it into Contents/Helpers.
+      - target: RevisUpdater
+        embed: false
+        link: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.revis.app
@@ -53,8 +58,13 @@ targets:
           # Un-sandboxed for local debug: ad-hoc signing plus the App Sandbox
           # crashes WebKit's WebContent child, and this app is a web view.
           CODE_SIGN_ENTITLEMENTS: Revis/Revis.Debug.entitlements
+          UPDATER_ENTITLEMENTS: Updater/revis-updater.Debug.entitlements
         release:
+          # Release is un-sandboxed too, since 0.2.0. The in-app updater cannot
+          # replace the app in /Applications from inside a container; the file
+          # itself records the whole reasoning.
           CODE_SIGN_ENTITLEMENTS: Revis/Revis.DeveloperID.entitlements
+          UPDATER_ENTITLEMENTS: Updater/revis-updater.DeveloperID.entitlements
     info:
       path: Revis/Info.plist
       properties:
@@ -117,6 +127,26 @@ targets:
       coverageTargets:
         - Revis
     postBuildScripts:
+      - name: Bundle the updater helper
+        # It ships at Contents/Helpers, which is where `AppUpdater.helperURL`
+        # looks — spelled out there rather than found through
+        # `url(forAuxiliaryExecutable:)`, which only searches Contents/MacOS.
+        #
+        # Signed with --timestamp=none so a Debug build never waits on Apple's
+        # timestamp server. That is not acceptable to the notary service, so
+        # scripts/release.sh re-signs this binary with a real timestamp after the
+        # Developer ID export and re-seals the app around it.
+        script: |
+          HELPERS="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers"
+          mkdir -p "$HELPERS"
+          cp -f "${BUILT_PRODUCTS_DIR}/revis-updater" "$HELPERS/revis-updater"
+          if [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]; then
+            codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" \
+              --options runtime --timestamp=none \
+              --entitlements "${SRCROOT}/${UPDATER_ENTITLEMENTS}" \
+              "$HELPERS/revis-updater"
+          fi
+        basedOnDependencyAnalysis: false
       - name: Stamp Version
         script: |
           PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
@@ -127,6 +157,39 @@ targets:
           BUILD=$(git -C "${SRCROOT}" rev-list --count HEAD 2>/dev/null || echo "1")
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD}" "${PLIST}" 2>/dev/null || true
         basedOnDependencyAnalysis: false
+  # The half of the updater that cannot live in the app: a bundle cannot replace
+  # itself while its own code is mapped. Nothing else is in here, and nothing here
+  # decides anything — every check that gates an install has already run in
+  # `AppUpdater` by the time this binary starts.
+  RevisUpdater:
+    type: tool
+    platform: macOS
+    sources:
+      - Updater
+    settings:
+      base:
+        PRODUCT_NAME: revis-updater
+        # The binary is `revis-updater`, but the Swift module must not be named
+        # anything that collides with the app's: both land in the same Products
+        # directory, and on case-insensitive APFS a near-miss breaks
+        # `@testable import Revis` in the test target with "no such module".
+        PRODUCT_MODULE_NAME: RevisUpdater
+        PRODUCT_BUNDLE_IDENTIFIER: app.revis.updater
+        # Must NOT be installed into the archive. A tool target otherwise lands in
+        # Products/usr/local/bin, the archive then holds two installed products,
+        # Xcode can no longer tell which is the app, and it writes no
+        # ApplicationProperties — at which point EVERY distribution method is
+        # rejected ("Unknown Distribution Error") and the release breaks. The app's
+        # post-build script copies the binary out of BUILT_PRODUCTS_DIR, which does
+        # not need it installed.
+        SKIP_INSTALL: true
+        GENERATE_INFOPLIST_FILE: true
+        # Signed by the app's post-build script, which is the only place that knows
+        # which entitlements this configuration wants. Signing it here as well would
+        # be a second opinion about the same binary.
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_ALLOWED: false
+
   RevisTests:
     type: bundle.unit-test
     platform: macOS
