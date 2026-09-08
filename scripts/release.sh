@@ -56,7 +56,7 @@ while [ $# -gt 0 ]; do
         --version=*) EXPLICIT_VERSION="${1#*=}" ;;
         --notes) shift; NOTES="${1:-}" ;;
         --notes=*) NOTES="${1#*=}" ;;
-        *) echo "Unknown option: $1"; sed -n '27,35p' "$0"; exit 1 ;;
+        *) echo "Unknown option: $1"; sed -n '27,33p' "$0"; exit 1 ;;
     esac
     shift
 done

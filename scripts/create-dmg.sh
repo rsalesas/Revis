@@ -25,9 +25,9 @@ VOLUME_NAME="Revis"
 # once the app is in place, so nothing is ever written to the protected path.
 BUILD_VOLUME_NAME="Revis-Installer"
 APP_NAME="Revis.app"
-WINDOW_WIDTH=640
-WINDOW_HEIGHT=420
-ICON_SIZE=160
+# The window size and icon positions are literals inside the AppleScript below, not shell
+# variables: the heredoc is quoted so that osascript sees the script rather than an
+# expansion of it, and a variable up here would look authoritative while changing nothing.
 
 APP_PATH="${1:-}"
 if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
