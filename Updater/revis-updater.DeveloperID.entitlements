@@ -8,11 +8,16 @@
 	     no App Sandbox, nothing else.
 
 	     Applied by scripts/release.sh, which re-signs this binary WITH a secure
-	     timestamp after the Developer ID export and before notarization — the
-	     app's post-build script signs it with --timestamp=none to keep Debug
+	     timestamp after the Developer ID export and before notarization. The app's
+	     post-build script signs it with the timestamp suppressed, to keep Debug
 	     builds offline and fast, and the notary service will not accept that.
 
 	     Only ever handed to `codesign`, which accepts an empty dict; Xcode's own
-	     build-time entitlements processing never sees this file. -->
+	     build-time entitlements processing never sees this file.
+
+	     Nothing in here may contain a doubled hyphen: it is an XML comment, so a
+	     literal codesign flag written out breaks the file for AMFI's parser, and
+	     the archive fails with "AMFIUnserializeXML: syntax error" naming a line
+	     number and nothing else. -->
 </dict>
 </plist>
