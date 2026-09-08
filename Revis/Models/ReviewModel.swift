@@ -340,8 +340,14 @@ final class ReviewModel: ObservableObject {
 
     // MARK: - What the pane shows
 
-    /// In document order, filtered. One list, computed in one place, so the pane, the
-    /// margin and the export cannot disagree about what is in the review.
+    /// In document order, filtered. What the PANE lists and the export carries.
+    ///
+    /// Not what the margin draws — see `annotationsJSON`. The two used to be the same list,
+    /// on the argument that one list computed in one place cannot disagree with itself;
+    /// and it could not, but it made the filter a switch on the document. The first review
+    /// to come back with every item resolved opened to an empty margin, because the pane
+    /// defaults to Open and the page was given the pane's list, and "0 open of 8" with no
+    /// dots anywhere read as the file having lost its marks.
     var visibleAnnotations: [Annotation] {
         annotations.inDocumentOrder().filter { filter.admits($0) }
     }
@@ -585,6 +591,11 @@ final class ReviewModel: ObservableObject {
     /// you about where you are.
     func select(_ id: UUID) {
         selectedID = id
+        // The margin draws every mark and the pane lists only the filtered ones, so the
+        // mark just clicked can belong to a row the pane is not showing. Widen the filter
+        // rather than select a row that is not there: the alternative is a click that
+        // opens the pane onto "Nothing outstanding", which is the app ignoring you again.
+        if let annotation = annotation(id), !filter.admits(annotation) { filter = .all }
         setPane(.annotations, open: true)
     }
 
@@ -619,7 +630,11 @@ final class ReviewModel: ObservableObject {
             var end: Int
             var rect: NormalizedRect?
         }
-        var wire = visibleAnnotations.map {
+        // EVERY annotation, whatever the pane's filter says. The filter is a view of the
+        // list; the marks are the review, and a resolved one is drawn as resolved — its
+        // mark exists for exactly this — rather than not drawn. A filter that also hid
+        // marks emptied the margin of any review that had been fully dealt with.
+        var wire = annotations.inDocumentOrder().map {
             Wire(id: $0.id.uuidString, intent: $0.intent.rawValue,
                  // A declined annotation is drawn like a settled one: it is still on the
                  // page, because the review records that somebody said no, but it must not

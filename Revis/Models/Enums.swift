@@ -39,7 +39,8 @@ enum ReviewTool: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// Which annotations the pane and the export are showing.
+/// Which annotations the pane lists and the export carries. The margin is not filtered:
+/// every mark is drawn, resolved ones as resolved. See `ReviewModel.annotationsJSON`.
 enum AnnotationFilter: String, CaseIterable, Identifiable, Sendable {
     case open, all, resolved
 

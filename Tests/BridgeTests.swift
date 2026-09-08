@@ -159,6 +159,37 @@ struct ReviewModelTests {
         #expect(model.visibleAnnotations.isEmpty)   // the pane defaults to Open
     }
 
+    /// The pane's filter is a view of the list, not a switch on the document. A review that
+    /// came back with every item resolved opened to an empty margin — "0 open of 8" and not
+    /// a dot anywhere — because the page was handed the pane's filtered list. The margin
+    /// draws every mark, a resolved one as resolved.
+    @Test func theMarginDrawsEveryMarkWhateverThePaneFilters() {
+        let model = model(defaultIntent: .comment)
+        model.openDraft(on: anchor)
+        model.draft?.note = "a"
+        model.commitDraft()
+        model.openDraft(on: anchor)
+        model.draft?.note = "b"
+        model.commitDraft()
+        for annotation in model.annotations { model.resolve(annotation.id) }
+
+        #expect(model.filter == .open)
+        #expect(model.visibleAnnotations.isEmpty)
+        for annotation in model.annotations {
+            #expect(model.annotationsJSON.contains(annotation.id.uuidString),
+                    "a resolved mark left the page when the pane filtered it out")
+        }
+        #expect(!model.annotationsJSON.contains("\"status\":\"open\""))
+
+        // And clicking one of those marks reaches its row: the filter widens rather than
+        // opening the pane onto "Nothing outstanding".
+        let picked = try! #require(model.annotations.first?.id)
+        model.select(picked)
+        #expect(model.filter == .all)
+        #expect(model.selectedID == picked)
+        #expect(model.visibleAnnotations.contains { $0.id == picked })
+    }
+
     /// A verdict is final, and it settles the annotation it is about.
     @Test func aVerdictIsFinalAndLocksWhatItDecided() {
         let model = model(defaultIntent: .change)
