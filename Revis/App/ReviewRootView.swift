@@ -13,6 +13,10 @@ struct ReviewRootView: View {
     /// Bumped once an HTML document has been imported, which is the moment the window has
     /// to stop being attached to the file it read. See `SourceDetachment`.
     @State private var detachGeneration = 0
+    /// Bumped whenever something that gets written to the `.revis` changes, which is how
+    /// AppKit is told there is anything to save at all. See `DocumentEdits` — without this
+    /// a review takes a dozen comments and still closes without asking.
+    @State private var edits = 0
 
     init(document: Binding<ReviewDocument>, fileURL: URL?) {
         _document = document
@@ -46,14 +50,23 @@ struct ReviewRootView: View {
             // window that wrote through to its `FileDocument` on every keystroke would mark
             // the file dirty for a note that was then abandoned.
             .onChange(of: model.annotations) { _, new in
-                if document.file.annotations != new { document.file.annotations = new }
+                guard document.file.annotations != new else { return }
+                document.file.annotations = new
+                edits &+= 1
             }
             .onChange(of: model.prepared) { _, new in
-                if document.file.document != new { document.file.document = new }
+                guard document.file.document != new else { return }
+                document.file.document = new
+                edits &+= 1
             }
             .onChange(of: model.source) { _, new in
-                if document.file.source != new { document.file.source = new }
+                guard document.file.source != new else { return }
+                document.file.source = new
+                edits &+= 1
             }
+            // Writing the value is not the same as saying it changed, and only one of the
+            // two happens on its own. See `DocumentEdits`.
+            .background(DocumentEdits(token: edits))
     }
 
     /// Sanitize an imported HTML document, once its folder is known.

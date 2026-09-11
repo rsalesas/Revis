@@ -22,6 +22,36 @@ Same as Vaelora, next door — this is deliberately its sibling.
   the intent colours, which mark is current — Swift decides and pushes it. The page is
   never allowed a second opinion.
 
+## Saving, and the thing that does not happen by itself
+
+**Writing through the `FileDocument` binding does NOT mark the document as having unsaved
+changes.** `document.file.annotations = new` in `ReviewRootView` updates the value SwiftUI
+will write on a save, and stops there. Measured: with a `.revis` open and one note edited,
+`isDocumentEdited` was still false two and a half seconds later.
+
+Everything else follows from that flag, which is why this cost a reviewer a dozen real
+comments. No "Edited" in the title bar. Save greyed out, because AppKit believed there was
+nothing to save. ⌘Q closing with no "do you want to save?", because as far as the framework
+knew there was nothing to lose. And no autosave — `isDocumentEdited` is what starts it — so
+the safety net that should have caught all of it had never once run.
+
+`DocumentEdits` reports the change explicitly, from the same `onChange` that writes it.
+Three consequences to keep in mind when touching any of this:
+
+- A new field that gets written into a `.revis` needs its `onChange` to bump `edits` too, or
+  that field silently does not survive being typed and closed.
+- Autosave is live now, which means the app writes files on its own. That is exactly the
+  condition invariant 1 exists for, and it is checked: an imported document has no
+  `fileURL`, so its autosave lands in `~/Library/Autosave Information` and the reviewed
+  HTML is untouched, byte for byte.
+- `SourceDetachment`'s `.changeCleared` still runs a hop later on import, on purpose: a
+  document that has only been opened has nothing in it worth a "save your changes?" sheet.
+
+Verified by measurement rather than by a test — `REVIS_PAGE_LOG` now records every edit the
+document is told about. A test would need AppKit's document plumbing around a SwiftUI
+`DocumentGroup`, and there is no seam for one; this is the biggest untested invariant in the
+app after the runtime's behaviour.
+
 ## The two invariants
 
 Both have a bug behind them; do not relax either.
