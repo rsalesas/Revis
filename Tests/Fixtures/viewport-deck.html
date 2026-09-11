@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A deck that scrolls inside itself</title>
+<style>
+html, body { margin: 0; padding: 0; }
+/* The shape every generated slide deck has, and the one that used to cost the margin
+   every mark past the first screen. */
+#deck {
+  height: 100vh;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+}
+.slide {
+  min-height: 100vh;
+  scroll-snap-align: start;
+  padding: 6vh 7vw;
+  overflow: hidden;
+}
+#dotnav { position: fixed; right: 16px; top: 50%; z-index: 55; }
+#footerbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; }
+</style>
+</head>
+<body>
+<div id="dotnav">•••</div>
+<div id="footerbar">1 / 6</div>
+<div id="deck">
+  <section class="slide"><h1>Opening</h1><p>The first slide, which is the only one that used to be reachable.</p></section>
+  <section class="slide"><h2>Second</h2><p>A paragraph on the second slide.</p></section>
+  <section class="slide"><h2>Third</h2><p>A paragraph on the third slide.</p></section>
+  <section class="slide"><h2>Fourth</h2><p>A paragraph on the fourth slide.</p></section>
+  <section class="slide"><h2>Fifth</h2><p>A paragraph on the fifth slide.</p></section>
+  <section class="slide"><h2>Closing</h2><p>The last slide, and the one the margin could not reach.</p></section>
+</div>
+</body>
+</html>

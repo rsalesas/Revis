@@ -66,6 +66,14 @@ Both have a bug behind them; do not relax either.
   what WebKit answers for free. `resolveColour` in review.js fills a one-pixel canvas and
   reads the bytes, so `lab()` and `color(display-p3 …)` are already handled. Swift decides
   what the answer MEANS — `data-rv-paper`, pushed like `rvSetDesk`, one source two readers.
+- `Revis/App/SourceDetachment.swift` — what happens to the source URL on import, and it
+  is two things, not one. The URL is taken AWAY from the document (invariant 1), and the
+  answers it was carrying are handed on separately: the window is named after the FILE, not
+  after the document's `<title>` — AppKit seeds the save panel's name field from
+  `displayName`, so that one property is both the title bar and the filename — and the
+  panel's folder is set through `NSNavLastRootDirectory`. That last one is written up at
+  length in the file because three supported-looking routes were tried first and all three
+  fail; do not reach for them again.
 - `Document/HTMLSanitizer.swift` — the tokenizer. The one place where being wrong is a
   security bug. It is a denylist over elements and an allowlist over attributes; keep it
   that way, and add a test to `Tests/SanitizerTests.swift` for anything you change.
@@ -74,7 +82,20 @@ Both have a bug behind them; do not relax either.
 - `Resources/review.js` — runs in an isolated `WKContentWorld`. It stamps `data-rv`
   indices, computes anchors, and draws. Text highlights use the Custom Highlight API rather
   than wrapping spans, because wrapping mutates the DOM and every stored offset is measured
-  against it.
+  against it. `layFlat()` runs first and is a precondition for everything after it: the
+  sheet IS the document laid out once and the margin is positioned inside it, so a page that
+  gives itself a `height: 100vh; overflow-y: scroll` box — every generated slide deck — has
+  to be unclipped before anything is measured. Measured, not matched: no selector can ask
+  whether a box is hiding its own contents. See `RuntimeTests`, and
+  `Tests/Fixtures/viewport-deck.html`, which is that shape in miniature.
+
+- **The document is a guest, and a guest does not get the furniture.** Two rules in
+  `review.css` exist only to hold that line and both have a document behind them: `html
+  body` carries the desk's padding, because a guest's `html, body { padding: 0 }` is one
+  element of specificity and later in the cascade; and `#rv-doc` is pinned to `z-index: 0`
+  so the `z-index: 55` a deck gives its own dot-strip is stacked inside the document rather
+  than over the margin. Add a rule on `#rv-doc` only for properties that are NOT inherited —
+  the trap for the inherited ones is written up beside the font and colour rules.
 - `Models/MarkdownOptions.swift` — what a Markdown document was read as. Stored in the
   review, not just in the preferences: the same file read as CommonMark and as Kramdown is
   two different documents, and the annotations were made against one of them. Hand-written

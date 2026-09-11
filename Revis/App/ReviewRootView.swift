@@ -26,7 +26,8 @@ struct ReviewRootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Not decoration: this is what stops the review being autosaved over the
             // document it is a review OF.
-            .background(SourceDetachment(generation: detachGeneration, name: model.displayName))
+            .background(SourceDetachment(generation: detachGeneration,
+                                         name: model.exportBaseName, source: fileURL))
             .focusedSceneValue(\.activeReview, model)
             .onAppear {
                 model.tool = appSettings.defaultTool
@@ -72,9 +73,10 @@ struct ReviewRootView: View {
         } else {
             return
         }
-        // The folder was needed to resolve the document's images; the URL is not wanted
-        // for anything after that, and keeping it is what would let a save reach the
-        // source file.
+        // The folder was needed to resolve the document's images; the DOCUMENT is not
+        // allowed to keep the URL after that, because keeping it is what would let a save
+        // reach the source file. The detachment is handed it all the same — it is what
+        // tells the save panel which folder the review belongs in, and under what name.
         detachGeneration &+= 1
     }
 }

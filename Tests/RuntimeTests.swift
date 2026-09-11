@@ -232,4 +232,138 @@ struct RuntimeTests {
         #expect(try await page.string("document.getElementById('rv-page').style.width") == "",
                 "the sheet never took its width back")
     }
+
+    // MARK: - Laying a document flat
+
+    /// A document that scrolls inside itself is laid flat before anything is measured.
+    ///
+    /// The sheet IS the document and the margin is positioned inside it, so a page that
+    /// hands itself a `height: 100vh; overflow-y: scroll` box — which is how every
+    /// generated slide deck is built — leaves the margin one screen tall for a document
+    /// twenty times that. Every mark past the first slide then has nowhere to go, and
+    /// scrolling the inner box slides the words out from under the marks that are left.
+    /// The user's report was "the dots do not stay with their content".
+    @Test func aDeckThatScrollsInsideItselfIsLaidFlat() async throws {
+        let page = RuntimeHarness.spec("viewport-deck.html")
+        _ = await page.wait(for: "ready")
+
+        #expect(page.posts.contains { $0.name == "flattened" },
+                "the page never said it had changed the document's layout")
+
+        // Nothing is clipping its own contents any more — asked of the document, not of
+        // the stylesheet, because that is the only form of the question that means
+        // anything (see `layFlat`).
+        #expect(try await page.int("""
+        Array.prototype.filter.call(
+          document.querySelectorAll('#rv-doc *'),
+          function (el) {
+            return getComputedStyle(el).overflowY !== 'visible'
+                && el.scrollHeight > el.clientHeight + 1;
+          }).length
+        """) == 0, "something in the document is still hiding part of itself")
+
+        #expect(try await page.int("""
+        Array.prototype.filter.call(
+          document.querySelectorAll('#rv-doc *'),
+          function (el) { return getComputedStyle(el).position === 'fixed'; }).length
+        """) == 0, "something in the document is still pinned to the window")
+
+        // And the point of all of it: the sheet is as tall as the document, so the last
+        // slide is inside the strip the marks are drawn in rather than thousands of
+        // points below it.
+        #expect(try await page.int("""
+        (function () {
+          var gutter = document.getElementById('rv-gutter').getBoundingClientRect();
+          var slides = document.querySelectorAll('#rv-doc .slide');
+          var last = slides[slides.length - 1].getBoundingClientRect();
+          return (last.top >= gutter.top - 1 && last.top <= gutter.bottom + 1) ? 1 : 0;
+        })()
+        """) == 1, "the last slide is outside the margin, so it can never carry a mark")
+    }
+
+    /// Every mark lands in the margin, including the one on the last slide.
+    ///
+    /// The same fault stated the way it was seen. Before this, a mark on a block below the
+    /// first screen was drawn thousands of points down a strip one screen tall — off the
+    /// sheet entirely, which reads as a dot that simply is not there.
+    @Test func aMarkOnTheLastSlideIsStillInTheMargin() async throws {
+        let page = RuntimeHarness.spec("viewport-deck.html")
+        let ready = await page.wait(for: "ready")
+        let blocks = (ready["blocks"] as? Int) ?? 0
+        #expect(blocks > 2, "the fixture stamped \(blocks) blocks")
+
+        try await page.eval("window.rvSetColours(\(AnnotationPalette.json()),"
+            + " \(AnnotationSymbols.json()));")
+        try await page.setAnnotations([
+            ["id": "first", "intent": "change", "status": "open", "blocks": [0],
+             "start": 0, "end": 4],
+            ["id": "last", "intent": "question", "status": "open", "blocks": [blocks - 1],
+             "start": 0, "end": 4],
+        ])
+
+        #expect(try await page.int("""
+        (function () {
+          var gutter = document.getElementById('rv-gutter').getBoundingClientRect();
+          return Array.prototype.filter.call(
+            document.querySelectorAll('#rv-gutter .rv-marker'),
+            function (m) {
+              var box = m.getBoundingClientRect();
+              return box.top >= gutter.top - 1 && box.bottom <= gutter.bottom + 1;
+            }).length;
+        })()
+        """) == 2, "a mark was drawn outside the strip it lives in")
+    }
+
+    /// The margin is above whatever the document stacked.
+    ///
+    /// A deck builds itself a dot-strip down the right-hand edge at `z-index: 55`; the
+    /// marks sit at 2. Nothing used to separate the two, so the document's furniture drew
+    /// straight over the gutter and — being a real element — took the press meant for a
+    /// mark with it.
+    @Test func theDocumentCannotStackItselfOverTheMargin() async throws {
+        let page = RuntimeHarness.spec("viewport-deck.html")
+        _ = await page.wait(for: "ready")
+        // At 100%, and not fitting. A hit test is asked in the viewport's coordinates and
+        // a mark is measured in the page's, and inside a `zoom`ed subtree those are two
+        // different spaces — see `paintMarkers`. They coincide at 1, which is the only
+        // place this test can ask its question and get an answer about stacking rather
+        // than about arithmetic.
+        try await page.eval("window.rvSetZoom(1);")
+        try await page.eval("window.rvSetColours(\(AnnotationPalette.json()),"
+            + " \(AnnotationSymbols.json()));")
+        try await page.setAnnotations([
+            ["id": "a", "intent": "change", "status": "open", "blocks": [0],
+             "start": 0, "end": 4],
+        ])
+        // Asked of the browser's own hit test rather than of the numbers, because the
+        // numbers were never the point: what matters is which element the press reaches.
+        //
+        // Scrolled to first. `elementFromPoint` answers for the viewport and nothing else,
+        // and a flattened deck is several screens tall — so a mark below the fold hit-tests
+        // as nothing at all, which is not the same finding as a mark that is covered.
+        #expect(try await page.string("""
+        (function () {
+          var mark = document.querySelector('#rv-gutter .rv-marker');
+          window.scrollTo(0, mark.getBoundingClientRect().top + window.scrollY
+                             - window.innerHeight / 2);
+          var box = mark.getBoundingClientRect();
+          var hit = document.elementFromPoint(box.left + box.width / 2,
+                                              box.top + box.height / 2);
+          return hit ? String(hit.className || hit.tagName) : 'nothing';
+        })()
+        """).contains("rv-marker"), "something in the document is over the mark")
+    }
+
+    /// The sheet keeps its margins whatever the document says about `body`.
+    ///
+    /// `html, body { padding: 0 }` is in every full-bleed page ever generated, and it used
+    /// to win outright — the paper ran flush to the window edge and read as a page that had
+    /// been cut off rather than one sitting on a desk.
+    @Test func theDocumentCannotTakeTheSheetsMargins() async throws {
+        let page = RuntimeHarness.spec("viewport-deck.html")
+        _ = await page.wait(for: "ready")
+        #expect(try await page.int("""
+        Math.round(parseFloat(getComputedStyle(document.body).paddingLeft))
+        """) > 0, "the document flattened the desk the sheet sits on")
+    }
 }

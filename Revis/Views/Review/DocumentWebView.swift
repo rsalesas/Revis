@@ -312,6 +312,13 @@ struct DocumentWebView: NSViewRepresentable {
                 if let value = dict["value"] as? Double { onZoom?(value) }
             case "fit":
                 if let value = dict["value"] as? Double { onFit?(value) }
+            case "flattened":
+                // The page changed the document's layout to make it a document — a
+                // viewport-sized scroller unclipped, something pinned to the window let
+                // go of. Logged rather than swallowed, because it is the one thing that
+                // makes what is on screen differ from the file as sent, and "why does
+                // this deck look nothing like it did in Safari" needs an answer.
+                PageLog.write("laid flat: \(dict["count"] ?? "?") boxes")
             case "debug":
                 PageLog.write(String(describing: dict))
             case "error":

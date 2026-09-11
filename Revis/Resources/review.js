@@ -69,6 +69,66 @@
     } catch (e) { /* the app is gone; nothing to tell */ }
   }
 
+  // --------------------------------------------------------------- laying flat
+
+  /* Undo, in the guest's own layout, the two things a document can do that stop it being a
+   * document: scroll inside itself, and pin itself to the window.
+   *
+   * The sheet IS the document, laid out once, top to bottom, and every mark in the margin
+   * is an absolute position inside it. A page that gives itself a viewport-sized scroller
+   * — `#deck { height: 100vh; overflow-y: scroll }`, which is how a generated slide deck is
+   * built — breaks that at the root. Measured on one: the sheet was 1161 points tall while
+   * the deck inside it held 21703, so the gutter had nowhere to put a mark for anything
+   * past the first screen, and scrolling the inner box moved the words out from under the
+   * marks that were drawn for them — the marks cannot follow, because the sheet they are
+   * positioned in did not move and nothing repaints on an inner scroll. That is exactly
+   * "the dots do not stay with their content, and do not update in the margin", and no
+   * amount of repainting fixes it: there is no room in a one-screen sheet for a
+   * twenty-seven-thousand-point document.
+   *
+   * MEASURED, not matched. Whether a box scrolls is a question about its computed style and
+   * about the content in it, which no selector can ask — so this walks the guest once and
+   * asks the browser. `overflow: hidden` counts: a deck clipped to one screen has lost the
+   * same nineteen twentieths of itself whether or not it offered a scrollbar. A box that
+   * merely declares `overflow: auto` and fits inside itself is left alone.
+   *
+   * Only the VERTICAL clip is undone. Marks are a vertical arrangement, so a sideways
+   * scroller — a wide table, a long line of code — costs the margin nothing, and unclipping
+   * it would spill the document under the gutter to fix a problem nobody had. Height is
+   * released with the overflow because releasing the overflow alone leaves a box the
+   * declared height with its contents drawn out of the bottom of it, over whatever follows.
+   *
+   * Fixed elements are moved to `absolute`, not removed. They are part of what was sent,
+   * they are things a reviewer may want to mark, and the claim here is only that nothing in
+   * the document is pinned to the window — not that the document's furniture is ours to
+   * throw away. They land in the document's own box, which is why `#rv-doc` is positioned
+   * (review.css). `sticky` is deliberately untouched: it is relative to the scrollport, and
+   * once there is only one scrollport it is already doing the right thing.
+   *
+   * Runs before `stamp()` and before anything is measured, because everything after it is
+   * measured. Once is enough — the page has no script of its own to undo it. */
+  function layFlat() {
+    var found = 0;
+    var all = doc.querySelectorAll("*");
+    for (var i = -1; i < all.length; i++) {
+      var el = i < 0 ? doc : all[i];
+      var style = window.getComputedStyle(el);
+      if (style.position === "fixed") {
+        el.style.setProperty("position", "absolute", "important");
+        found++;
+      }
+      if (style.overflowY !== "visible" && el.scrollHeight > el.clientHeight + 1) {
+        el.style.setProperty("overflow-y", "visible", "important");
+        el.style.setProperty("height", "auto", "important");
+        el.style.setProperty("max-height", "none", "important");
+        found++;
+      }
+    }
+    /* Said out loud, because the alternative is a document that silently looks a little
+       different from the file the reviewer was sent and no way to know this touched it. */
+    if (found) post("flattened", { count: found });
+  }
+
   // ------------------------------------------------------------------ stamping
 
   /* Give every anchorable block a number, and work out where it sits.
@@ -1067,6 +1127,7 @@
     overlay = document.getElementById("rv-regions");
     if (!doc) return;
 
+    layFlat();
     stamp();
 
     document.addEventListener("click", handleClick, true);

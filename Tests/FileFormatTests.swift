@@ -153,4 +153,43 @@ struct FileFormatTests {
             .write(to: directory.appendingPathComponent("specimen-review.md"),
                    atomically: true, encoding: .utf8)
     }
+
+    // MARK: - Where a review is offered a home
+
+    /// A review is offered beside the file it reviews, under that file's name.
+    ///
+    /// Before this the save panel was seeded from the only two things a detached draft has
+    /// left — the document's display name, which was its `<title>`, and whatever folder a
+    /// panel was last pointed at. A review of `Masterclass_IA_Responsable.html` came up as
+    /// *Angles morts de l'IA : Numérique responsable — Masterclass.revis* somewhere else
+    /// entirely, which is a name nobody typed in a place nobody chose.
+    @MainActor
+    @Test func aReviewIsOfferedBesideTheFileItReviews() {
+        let source = URL(fileURLWithPath: "/Users/someone/Downloads/spec.html")
+        let offered = SourceDetachment.reviewURL(beside: source)
+        #expect(offered.deletingLastPathComponent() == source.deletingLastPathComponent())
+        #expect(offered.lastPathComponent == "spec.revis")
+
+        // Only the LAST extension goes: `spec.v2.html` is a file called `spec.v2`.
+        #expect(SourceDetachment.reviewURL(
+            beside: URL(fileURLWithPath: "/tmp/spec.v2.html")).lastPathComponent
+                == "spec.v2.revis")
+    }
+
+    /// And the name it is offered under is the name its export would use.
+    ///
+    /// Two answers to "what is this document called", arrived at in two places — the save
+    /// panel through `NSDocument.displayName`, the export through `exportBaseName` — and a
+    /// reviewer with `spec.revis` beside `spec review.md` should not have to wonder whether
+    /// they belong together.
+    @MainActor
+    @Test func theSaveNameAndTheExportNameAgree() {
+        let model = ReviewModel(file: ReviewFile(
+            source: SourceInfo(name: "Masterclass_IA_Responsable.html", path: nil,
+                               capturedAt: .reviewStamp, digest: ""),
+            document: .empty), appSettings: AppSettings())
+        let offered = SourceDetachment.reviewURL(
+            beside: URL(fileURLWithPath: "/tmp/Masterclass_IA_Responsable.html"))
+        #expect(offered.deletingPathExtension().lastPathComponent == model.exportBaseName)
+    }
 }
