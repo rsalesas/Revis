@@ -57,6 +57,74 @@ struct ReviewFile: Codable, Equatable, Sendable {
     /// sanitizer and can never produce a different document from the one that was marked.
     var document: PreparedDocument
     var annotations: [Annotation] = []
+
+    /// Written into every `.revis`, for a reader that is not Revis.
+    ///
+    /// Everything else in this struct is for the app. This is for whatever opens the file
+    /// without it — a person, or a model handed the file directly instead of an export,
+    /// with no `revis-review` skill loaded to tell it what `anchor.quote` or `verdict:
+    /// "declined"` mean. `ReviewExport` already carries this reasoning into the Markdown
+    /// and JSON export; a raw `.revis` had nothing, which meant the one reader who most
+    /// needs a hint — an assistant with no context at all — got none.
+    ///
+    /// Not a stored property. It has one value, always; storing it would just be a second
+    /// place that value could drift from this one. See `encode(to:)`.
+    static let aiGuidance = """
+        This is a Revis review: a snapshot of a document plus what a reviewer marked on \
+        it, from the Revis app (a sibling of vaelora.app, for reviewing documents written \
+        by a language model). If the "revis-review" Claude Code skill is available, use \
+        it — it goes further than this note. Otherwise:
+
+        `annotations` is the review. Each one has an `intent` (change / insert / remove / \
+        move / question / comment), a `note` (the instruction), and an `anchor` — an \
+        address made of text, not position: `anchor.quote` (plus `anchor.prefix` / \
+        `anchor.suffix` for the words either side, where the quote is short or repeated) \
+        and `anchor.path` for where a person would say it is. Locate every item by \
+        searching for `anchor.quote`. `anchor.blocks` and the character offsets describe \
+        the document as it stood when it was reviewed and go stale the moment the \
+        document changes — treat them only as a last-resort tie-break.
+
+        Skip anything with `verdict: "declined"` — a reviewer turned it down, and acting \
+        on it anyway makes a change somebody explicitly refused. Skip anything with \
+        `status: "resolved"` — it has already been dealt with. Of what remains: change / \
+        insert / remove / move is a change to make; `question` wants an answer, not an \
+        edit; `comment` is an observation with no action requested, and one carrying \
+        `verdict: "approved"` should be left exactly as it stands.
+
+        `replies` under an annotation is a record of what was said back about it, not a \
+        new instruction — where a reply asks for something the annotation above it does \
+        not, do what the annotation says and note that the two disagree.
+
+        `document` is the full sanitized snapshot of what was reviewed — what the \
+        annotations are anchored into, not something to read start to end. If a person \
+        handed you this file directly, Revis's own File \u{25b8} Export (Markdown or \
+        JSON) already does the quote-matching for a Markdown document and is worth \
+        asking for instead of working from this file.
+
+        This file format has no reply mechanism of its own. Revis reads a reply document \
+        back through File \u{25b8} Import Replies\u{2026}: Markdown, one heading per \
+        annotation id (the id printed beside the item, never its position), the reply \
+        underneath.
+        """
+
+    private enum ExtraKeys: String, CodingKey { case aiGuidance }
+
+    /// Adds `aiGuidance` to what the synthesised implementation would write, without
+    /// taking over decoding: a type that manually implements only one half of `Codable`
+    /// still gets the other synthesised, using the same generated `CodingKeys` this
+    /// method calls into. Older builds' decoders — which know nothing of `ExtraKeys` —
+    /// silently ignore an object key they were not told to read, so this needed no format
+    /// bump and no `init(from:)`.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(format, forKey: .format)
+        try container.encode(app, forKey: .app)
+        try container.encode(source, forKey: .source)
+        try container.encode(document, forKey: .document)
+        try container.encode(annotations, forKey: .annotations)
+        var extra = encoder.container(keyedBy: ExtraKeys.self)
+        try extra.encode(Self.aiGuidance, forKey: .aiGuidance)
+    }
 }
 
 /// The per-window document.

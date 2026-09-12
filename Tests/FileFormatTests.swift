@@ -76,6 +76,25 @@ struct FileFormatTests {
         #expect(restored.annotations[1].replies.map(\.isAssistant) == [true, false])
     }
 
+    /// The file explains itself to a reader that is not Revis.
+    ///
+    /// Written, never read back — `aiGuidance` is not a stored property, so this is a
+    /// property of the ENCODER, not of `ReviewFile` equality, and the round-trip test
+    /// above is silent about it on purpose.
+    @Test func theFileCarriesANoteForAReaderWithoutTheSkill() throws {
+        let original = sample()
+        let data = try JSONEncoder.revis.encode(original)
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let guidance = try #require(object?["aiGuidance"] as? String)
+        #expect(guidance == ReviewFile.aiGuidance)
+        #expect(guidance.contains("annotations"))
+        #expect(guidance.contains("declined"))
+        // A build that has never heard of `aiGuidance` must still open this file: nothing
+        // here is a required key for `ReviewFile.init(from:)`.
+        let restored = try JSONDecoder.revis.decode(ReviewFile.self, from: data)
+        #expect(restored == original)
+    }
+
     /// A review saved before replies existed still opens.
     ///
     /// This is the test the whole feature turns on, and it is written as raw JSON rather

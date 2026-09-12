@@ -1,0 +1,21 @@
+{
+  "name": "revis",
+  "owner": {
+    "name": "Robert Salesas",
+    "url": "https://github.com/rsalesas"
+  },
+  "plugins": [
+    {
+      "name": "revis",
+      "source": "./",
+      "description": "How to apply or reply to a review made in Revis: locating annotations by quoted text, which sections are instructions vs. a record not to act on, and how to write a reply document Revis can import back.",
+      "version": "0.3.5",
+      "author": { "name": "Robert Salesas" },
+      "homepage": "https://github.com/rsalesas/Revis",
+      "repository": "https://github.com/rsalesas/Revis",
+      "license": "PolyForm-Noncommercial-1.0.0",
+      "keywords": ["revis", "review", "annotations", "markdown", "agent-guide"],
+      "category": "development"
+    }
+  ]
+}
