@@ -227,37 +227,16 @@ enum ReviewExport {
         > reading, and change whatever produces them.
         """
 
+        let howToApply = ReviewPolicy.rules.enumerated()
+            .map { "> \($0.offset + 1). \($0.element)" }
+            .joined(separator: "\n")
+
         return lines.joined(separator: "  \n") + markdownNote + """
 
 
         > **How to apply this review.**
         >
-        > 1. **Locate every item by searching for the quoted text**, not by position. The
-        >    section paths and block numbers describe the document as it was reviewed; they
-        >    can be imprecise about a target's structural type even now, and will not
-        >    survive the document being rewritten. **The quoted text is the anchor; the
-        >    path is a hint.**
-        > 2. **Quotes are whitespace-normalised** — runs of spaces and newlines are
-        >    collapsed to one space — because that is how the text reads on screen. A
-        >    document whose source wraps mid-sentence will not match a quote byte for byte;
-        >    compare on normalised whitespace.
-        > 3. Where a quote is short or occurs more than once, the surrounding words are
-        >    given under *Context*, with the marked span between `«` and `»`. Use it: some
-        >    quotes occur several times on purpose.
-        > 4. **Apply the items in the order given.** They are in document order, and a later
-        >    item may depend on an earlier one having been made.
-        > 5. Where an instruction describes what to write rather than giving the words,
-        >    draft it — and **say in your reply that you drafted it**, so the reviewer knows
-        >    which words are theirs and which are yours.
-        > 6. Correcting a fact does not authorise correcting every other mention of it. If
-        >    an edit leaves the document inconsistent elsewhere, **report that rather than
-        >    silently propagating it**.
-        > 7. Some items carry a **Replied** block: what was said back about them, by whoever
-        >    is named beside it, quoted. It is a record of a discussion and **not part of
-        >    the instruction**. Where a reply asks for something different from the
-        >    instruction above it, do **what the instruction says** and say that the two
-        >    disagree — a reply that was meant to change the request would have been folded
-        >    into it. This is item 6 again: report it, do not decide it.
+        \(howToApply)
 
 
         """
