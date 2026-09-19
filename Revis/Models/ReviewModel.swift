@@ -35,7 +35,13 @@ struct AnnotationDraft: Equatable {
 enum Pane {
     case outline, annotations
 
-    var width: CGFloat { self == .outline ? 260 : 300 }
+    /// The outline is 290 because its own tab picker asks for 281 with three tabs in it
+    /// — Outline, Document, Markdown — and a segmented control that does not fit is not
+    /// reliably squeezed. Most layout passes squeezed it; the odd one handed it its
+    /// intrinsic width instead, so toggling the other pane made the tabs grow past the
+    /// pane and snap back a frame later. Measured, at 260: 241 normally, 261 in the pass
+    /// that flashed. Nothing narrower than 281 can be relied on to hold still.
+    var width: CGFloat { self == .outline ? 290 : 300 }
 
     @MainActor func isOpen(_ model: ReviewModel) -> Bool {
         self == .outline ? model.inspectorVisible : model.annotationsVisible
