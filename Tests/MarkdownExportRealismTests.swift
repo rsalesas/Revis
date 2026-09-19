@@ -18,12 +18,20 @@ import Foundation
 /// point, an item somebody declined, and a thread that argues with its own instruction.
 struct MarkdownExportRealismTests {
 
-    static func source() -> String {
-        let url = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Samples/large-spec.md")
-        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-    }
+    /// Generated here rather than read out of `Samples/large-spec.md`, which is the same
+    /// text: `LargeDocumentTests` WRITES that file, the suite runs in parallel, and this
+    /// test read it mid-replace. What came back was the empty string — `try?` — so the
+    /// document had no blocks, the review had no items, and the failure was an item count
+    /// of zero in no measurable time, which says nothing about the export and sent a
+    /// release's test run red for a reason that was not in the app.
+    ///
+    /// The generator is seeded, so this is the same document every time and the same one
+    /// that file holds. Held rather than regenerated because the test asks for it twice —
+    /// once for the review, once for the shadow the review is checked against — and a
+    /// hundred and thirty-five thousand words is not free.
+    static let generated = LargeDocument.markdown(words: LargeDocumentTests.targetWords).text
+
+    static func source() -> String { generated }
 
     @Test func writeALargeMarkdownReviewForTestingAgainstAModel() throws {
         let file = try Self.realisticFile()
