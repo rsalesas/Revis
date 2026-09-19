@@ -177,6 +177,7 @@ struct ReviewView: View {
             }
             .help("Show or hide the outline and document details")
         }
+        .withoutGlass()
 
         ToolbarItemGroup(placement: .principal) {
             Picker("Tool", selection: $model.tool) {
@@ -218,6 +219,7 @@ struct ReviewView: View {
                 .help(helpFor(intent))
             }
         }
+        .withoutGlass()
 
         ToolbarItemGroup(placement: .primaryAction) {
             Button {
@@ -245,6 +247,23 @@ struct ReviewView: View {
             }
             .help("Show or hide the annotations")
 
+        }
+        .withoutGlass()
+    }
+}
+
+extension ToolbarContent {
+    /// From macOS 26 a toolbar sets its items on shared glass capsules, which put a
+    /// second surface between the controls and the title bar — and, worse here, tint
+    /// under the intent buttons, whose whole job is to carry the intent's own colour
+    /// unaltered (one source, two readers: the same colour the mark and the row get).
+    /// The controls sit straight on the title bar, as they did before, and on macOS 15
+    /// there was nothing to take away.
+    @ToolbarContentBuilder func withoutGlass() -> some ToolbarContent {
+        if #available(macOS 26, *) {
+            sharedBackgroundVisibility(.hidden)
+        } else {
+            self
         }
     }
 }
