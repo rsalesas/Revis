@@ -15,6 +15,7 @@ enum Theme {
 
     static let inspectorBackground = Color(nsColor: .windowBackgroundColor)
     static let paneBackground = Color(nsColor: .revisPaneBackground)
+    static let windowBackground = Color(nsColor: .revisWindowBackground)
     static let documentBackground = Color(nsColor: .revisDocumentBackground)
     static let hairline = Color.primary.opacity(0.10)
 
@@ -57,11 +58,30 @@ extension NSColor {
                   : NSColor(white: 0.965, alpha: 1)
     }
 
-    /// The desk the document sheet sits on. Matches `--rv-backdrop` in review.css, so the
-    /// web view and the SwiftUI around it are one surface rather than two greys meeting.
-    static let revisDocumentBackground = NSColor(name: nil) { a in
+    /// The window's own surface — which a toolbar-bearing window shows through its title
+    /// bar, because the content view runs up underneath it.
+    ///
+    /// It used to be the desk below, and that is what made the title bar look like a slab
+    /// carrying on past the document's top edge: two surfaces the eye reads as one, with
+    /// nothing but the toolbar's controls to say where the chrome stopped. Same colour as
+    /// before — the title bar is not what changed — but named for what it actually paints.
+    static let revisWindowBackground = NSColor(name: nil) { a in
         isDark(a) ? NSColor(white: 0.157, alpha: 1)
                   : NSColor(srgbRed: 228/255, green: 228/255, blue: 230/255, alpha: 1)
+    }
+
+    /// The desk the document sheet sits on. Matches `--rv-backdrop` in review.css, so the
+    /// web view and the SwiftUI around it are one surface rather than two greys meeting.
+    ///
+    /// A STEP DOWN from the window above, and it has to clear two things rather than one:
+    /// the title bar it meets along the top, and the outline pane it meets down the side
+    /// (`windowBackgroundColor`, a darker grey than the title bar in Dark). Landing
+    /// between them would separate the desk from one and merge it with the other, so it
+    /// goes below both — far enough that the document reads as sunk into a well rather
+    /// than laid on the same surface as the controls.
+    static let revisDocumentBackground = NSColor(name: nil) { a in
+        isDark(a) ? NSColor(white: 26/255, alpha: 1)
+                  : NSColor(srgbRed: 217/255, green: 217/255, blue: 222/255, alpha: 1)
     }
 }
 

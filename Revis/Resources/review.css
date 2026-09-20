@@ -10,7 +10,13 @@
  */
 
 :root {
-  --rv-backdrop: #e4e4e6;
+  /* The desk, and it is MIRRORED — `Theme.revisDocumentBackground` in Swift is the same
+     two colours, because the web view and the SwiftUI around it have to be one surface
+     rather than two greys meeting at the sheet's gutter. Change one, change the other.
+     It is deliberately a step below `revisWindowBackground`, which is what the title bar
+     shows: when the desk and the window were the same grey the toolbar looked like it
+     carried on down past the top of the document. */
+  --rv-backdrop: #d9d9de;
   --rv-sheet: #ffffff;
   --rv-ink: #1c1c1e;
   --rv-rule: rgba(0, 0, 0, 0.10);
@@ -45,7 +51,7 @@
    would now read that pin rather than the reviewer's Mac. Swift knows the real answer and
    pushes it through `rvSetDesk` — the same rule as the intent colours, one source and two
    readers, with the page never allowed a second opinion. */
-html[data-rv-desk="dark"] { --rv-backdrop: #282828; --rv-shadow: rgba(0, 0, 0, 0.55); }
+html[data-rv-desk="dark"] { --rv-backdrop: #1a1a1a; --rv-shadow: rgba(0, 0, 0, 0.55); }
 
 html, body {
   margin: 0;

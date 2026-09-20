@@ -35,7 +35,12 @@ struct ReviewView: View {
             // and read as part of the page rather than as part of the app.
             if !model.isEmpty { StatusBar(model: model) }
         }
-        .background(Theme.documentBackground)
+        // The WINDOW's surface, not the desk's — and since this one runs up under the
+        // title bar, what is painted here is what the title bar shows. It was the desk,
+        // and the two being one colour is what made the toolbar read as a slab carrying
+        // on down past the document's top edge. The colour here is unchanged; what moved
+        // is the desk, which the document pane now paints for itself.
+        .background(Theme.windowBackground)
         .navigationTitle(model.displayName)
         .navigationSubtitle(subtitle)
         .toolbar { toolbar }
@@ -159,6 +164,12 @@ struct ReviewView: View {
             // the two paths came to disagree.
             onRegion: { model.openDraft(on: $0) })
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The desk, on the one view that is standing on it — a step below the window
+        // around it, so the document sits in a well rather than on the same surface as
+        // the toolbar. The page paints this same colour itself (`--rv-backdrop`), so what
+        // is seen here is the moments the web view has not painted yet: mid-resize, and
+        // before the first load.
+        .background(Theme.documentBackground)
     }
 
     // MARK: - Toolbar
