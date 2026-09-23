@@ -171,23 +171,26 @@ asserts on the **signed bundle** that it is not sandboxed, that it holds that en
 and that it holds *nothing else* — the last of those because the README makes the claim to
 a reader and a claim that can be checked should be.
 
-- `Revis/Update/UpdateChecker.swift` — the manifest, and what a fetched one means. Fails
-  closed everywhere: an unparseable version, a 404, a build needing a newer macOS all end
-  as "up to date" or a reported failure, never as an offer. `URLSession` does not throw on
-  an HTTP error status, so the status is checked by hand — without it a captive portal's
-  login page goes to the JSON decoder.
-- `Revis/Update/AppUpdater.swift` — installing one. Doing the swap ourselves bypasses the
-  Gatekeeper check a fresh download would get, so this has to do Gatekeeper's job:
-  SHA-256 against the manifest, a code-signing requirement pinned to the Developer ID
-  **chain** (team alone accepts our own Debug builds — a test caught that), and strictly
-  newer than the running copy. Everything before the hand-off is reversible.
-- `Updater/` — the `revis-updater` helper, its own `tool` target. It exists because a
-  bundle cannot replace itself while its own code is mapped. Two traps live in its target
-  settings and are commented there: `SKIP_INSTALL` (without it the archive holds two
-  installed products and *every* distribution method is rejected), and a module name that
-  must not near-miss the app's on case-insensitive APFS.
-- `Revis/Update/SemanticVersion.swift` — not `AppVersion`, which is taken by "what am I".
-  A type with tests rather than an inline `<`, because `"0.2.10" < "0.2.9"` is true.
+- **The updater is UpdateKit** (`github.com/rsalesas/UpdateKit`, `~/Git/UpdateKit`), shared
+  with Vaelora. The checker, the verified install, `AppVersion` and the banner, dialog and
+  progress window all live there, with their tests; a fix to any of them is made in the
+  package and reaches Revis by bumping `from:` in `project.yml`. Do not grow a local copy
+  back. What the package does is fail closed: an unparseable version, a 404, a build
+  needing a newer macOS end as "up to date" or a reported failure, never as an offer; and
+  an install demands SHA-256 against the manifest, a code-signing requirement pinned to the
+  Developer ID **chain** (team alone accepts our own Debug builds), and strictly newer.
+- `Revis/Update/RevisUpdates.swift` — the only answers Revis gives the package: the
+  manifest URL, the team and bundle id the requirement pins, the helper, and the
+  preference keys. The keys are `AppSettings`' old ones on purpose, so a user who turned
+  the check off before the package existed still has it off. `UpdateTests` holds each of
+  these against `project.yml` and `release.sh`, which is all that is left to test here.
+- `Updater/` — the `revis-updater` helper, its own `tool` target, now a dozen lines that
+  hand over to UpdateKit's `UpdateSwap.run`. Kept rather than using the package's
+  built-in shell swap because it is one atomic `replaceItemAt` rather than two renames,
+  and `release.sh` already signs and verifies it. Two traps live in its target settings
+  and are commented there: `SKIP_INSTALL` (without it the archive holds two installed
+  products and *every* distribution method is rejected), and a module name that must not
+  near-miss the app's on case-insensitive APFS.
 
 ## Releasing
 

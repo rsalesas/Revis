@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UpdateKit
 
 /// App-wide shared state. Each review lives in its own window with its own `ReviewModel`;
 /// this holds only what is common to every window.
@@ -20,6 +21,6 @@ final class AppState: ObservableObject {
 
     init(appSettings: AppSettings = AppSettings(), updateChecker: UpdateChecker? = nil) {
         self.appSettings = appSettings
-        self.updateChecker = updateChecker ?? UpdateChecker(settings: appSettings)
+        self.updateChecker = updateChecker ?? UpdateChecker(configuration: RevisUpdates.configuration())
     }
 }

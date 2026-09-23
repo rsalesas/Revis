@@ -13,7 +13,7 @@ set -euo pipefail
 #   appcast.json          what the in-app updater READS, fetched from
 #                         releases/latest/download/appcast.json, which GitHub redirects
 #                         to the newest release's asset of that name. That is why the
-#                         manifest URL in UpdateChecker never has to change.
+#                         manifest URL in RevisUpdates never has to change.
 #
 # The app is notarized and stapled BEFORE the DMG is built around it, and the DMG is
 # then notarized and stapled itself. Both, deliberately: a ticket on the disk image says
@@ -383,7 +383,7 @@ LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Framewo
 rm -rf "$EXPORT_DIR"
 
 # --- 7. The manifest ---------------------------------------------------------
-# What the in-app update check reads (see UpdateChecker). Every URL in it is the
+# What the in-app update check reads (see RevisUpdates). Every URL in it is the
 # IMMUTABLE per-tag one, never releases/latest/, so a download that starts now cannot
 # be swapped underneath by the next release — the checksum the client is holding would
 # then be for different bytes.

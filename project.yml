@@ -32,6 +32,12 @@ packages:
   Apex:
     url: https://github.com/ApexMarkdown/apex
     from: 1.1.21
+  # The in-app updater: manifest check, verified download, the swap, and the banner,
+  # dialog and progress window. It started life here and in Vaelora as two copies of the
+  # same code; it is one package now, and a fix to it ships by bumping this version.
+  UpdateKit:
+    url: https://github.com/rsalesas/UpdateKit.git
+    from: "0.1.0"
 targets:
   Revis:
     type: application
@@ -41,6 +47,10 @@ targets:
     dependencies:
       - package: Apex
         product: ApexC
+      - package: UpdateKit
+        product: UpdateKit
+      - package: UpdateKit
+        product: UpdateKitUI
       # Build-order only: the helper is a tool, so it must not be linked or
       # embedded — the post-build script copies it into Contents/Helpers.
       - target: RevisUpdater
@@ -128,8 +138,8 @@ targets:
         - Revis
     postBuildScripts:
       - name: Bundle the updater helper
-        # It ships at Contents/Helpers, which is where `AppUpdater.helperURL`
-        # looks — spelled out there rather than found through
+        # It ships at Contents/Helpers, which is the path `RevisUpdates`
+        # hands UpdateKit — spelled out there rather than found through
         # `url(forAuxiliaryExecutable:)`, which only searches Contents/MacOS.
         #
         # Signed with --timestamp=none so a Debug build never waits on Apple's
@@ -160,12 +170,15 @@ targets:
   # The half of the updater that cannot live in the app: a bundle cannot replace
   # itself while its own code is mapped. Nothing else is in here, and nothing here
   # decides anything — every check that gates an install has already run in
-  # `AppUpdater` by the time this binary starts.
+  # UpdateKit's `AppUpdater`, inside the app, by the time this binary starts.
   RevisUpdater:
     type: tool
     platform: macOS
     sources:
       - Updater
+    dependencies:
+      - package: UpdateKit
+        product: UpdateKit
     settings:
       base:
         PRODUCT_NAME: revis-updater

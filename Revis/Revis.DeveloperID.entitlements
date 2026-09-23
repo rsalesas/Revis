@@ -11,7 +11,7 @@
 	  /Applications — `isWritableFile` answers false from inside a container and
 	  the write fails with NSFileWriteNoPermissionError — so an in-place update can
 	  only ever be refused at its very last step. Vaelora next door hit exactly
-	  this and dropped its sandbox for the same reason; see AppUpdater.
+	  this and dropped its sandbox for the same reason; see UpdateKit's AppUpdater.
 
 	  So the containment that mattered stayed and moved DOWN, to where the
 	  untrusted thing actually is. The document is still made inert by the
@@ -27,7 +27,7 @@
 
 	<!--
 	  Outbound only, and used in exactly two places: reading the update manifest
-	  and downloading the archive named in it (UpdateChecker, AppUpdater). There is
+	  and downloading the archive named in it (UpdateKit, via RevisUpdates). There is
 	  no server side to this app.
 	-->
 	<key>com.apple.security.network.client</key>
