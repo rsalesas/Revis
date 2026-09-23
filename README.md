@@ -233,7 +233,8 @@ Any of those failing leaves the installed copy untouched and the download route 
 Only the last step is irreversible, and by then all three have passed. The swap itself is
 one `replaceItemAt` performed by a small helper outside the bundle — a bundle cannot
 replace itself while its own code is mapped — which waits for the app to exit and starts
-the new copy. See `Revis/Update/AppUpdater.swift` and `Updater/`.
+the new copy. The updater is [UpdateKit](https://github.com/rsalesas/UpdateKit), shared
+with Vaelora; `Revis/Update/RevisUpdates.swift` is what makes it Revis's.
 
 ## Releasing
 

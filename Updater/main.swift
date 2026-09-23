@@ -1,4 +1,5 @@
 import Foundation
+import UpdateKit
 
 // `revis-updater`, bundled at Contents/Helpers and never installed anywhere else. It has
 // exactly one job and one subcommand; the subcommand is spelled out rather than assumed so
@@ -7,7 +8,7 @@ let arguments = Array(CommandLine.arguments.dropFirst())
 
 switch arguments.first {
 case "apply-update":
-    ApplyUpdate.run(Array(arguments.dropFirst()))
+    UpdateSwap.run(arguments: Array(arguments.dropFirst()))
 default:
     FileHandle.standardError.write(Data("""
         revis-updater — the helper Revis uses to replace itself during an update.

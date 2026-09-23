@@ -57,18 +57,14 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    /// Look for a newer build on the releases page, once a day.
+    /// Look for a newer build on the releases page, once a day. UpdateKit's checker reads
+    /// the same key every time it asks, so this toggle and the checker cannot disagree.
     @Published var checkForUpdates: Bool { didSet { save(.checkForUpdates, checkForUpdates) } }
 
-    /// When the last automatic check ran, so it can be throttled to once a day. Not
-    /// `@Published`: it changes during a check and nothing renders from it.
-    var lastUpdateCheck: Date? {
-        get {
-            let t = defaults.double(forKey: Key.lastUpdateCheck.rawValue)
-            return t > 0 ? Date(timeIntervalSince1970: t) : nil
-        }
-        set { defaults.set(newValue?.timeIntervalSince1970 ?? 0, forKey: Key.lastUpdateCheck.rawValue) }
-    }
+    /// The keys handed to UpdateKit (see `RevisUpdates`). The last-check time is the
+    /// package's to write; it is named here only so it stays where earlier builds kept it.
+    nonisolated static let checkForUpdatesKey = Key.checkForUpdates.rawValue
+    nonisolated static let lastUpdateCheckKey = Key.lastUpdateCheck.rawValue
 
     /// Who imported replies are signed as when the document did not say. Remembered
     /// because it is the same assistant most of the time and retyping it every import is a
