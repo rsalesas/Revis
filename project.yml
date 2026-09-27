@@ -29,9 +29,17 @@ packages:
   # `apex_options` struct has about ninety. Every switch this app puts in front of a
   # reviewer — tables, footnotes, smart typography, wiki links, definition lists — exists
   # only in C. See `MarkdownRenderer`, which is the one place that boundary is crossed.
+  #
+  # EXACT, not `from:`. From 1.1.23 the bundled `CYaml` target — which `ApexC` depends on —
+  # carries `.unsafeFlags(["-Wno-shorten-64-to-32"])` to quieten a warning, so `ApexC` is
+  # refused too ("uses unsafe build flags") and the first point above now covers both
+  # products. `from:` let a fresh checkout float to 1.1.32 and fail to build; checkouts
+  # that already had a resolved file never noticed, because the resolved file lives in the
+  # generated, gitignored project. Moving this means checking the new tag's Package.swift
+  # for `unsafeFlags` on anything `ApexC` pulls in.
   Apex:
     url: https://github.com/ApexMarkdown/apex
-    from: 1.1.21
+    exactVersion: 1.1.21
   # The in-app updater: manifest check, verified download, the swap, and the banner,
   # dialog and progress window. It started life here and in Vaelora as two copies of the
   # same code; it is one package now, and a fix to it ships by bumping this version.
