@@ -27,6 +27,30 @@ enum AnnotationPalette {
 
     static func color(for intent: Intent) -> Color { Color(hex: hex(for: intent)) }
 
+    /// The intent's colour as a bare glyph on the title bar — the palette's own colour in
+    /// Dark, and the same hue taken `toolbarDeepening` toward black in Light.
+    ///
+    /// The palette is mid-tone because its main job is a filled disc on white paper, and
+    /// that is a job it does in either appearance. A thin stroke straight on the light
+    /// title bar is a different job: measured against it, amber was 1.8:1 and not one of
+    /// the six reached 3:1, and a disabled button — which is how they spend most of their
+    /// time, with nothing selected — dimmed that to about 1.1:1, a faint smudge where a
+    /// pencil should be. In Dark the same colours sit at 4 to 6.5 and needed nothing.
+    ///
+    /// Deepened, not re-picked: a second set of hexes is a second opinion about what
+    /// "critical" looks like, and this is still the one colour, carried to another surface.
+    static func toolbarColor(for intent: Intent) -> Color {
+        let colour = NSColor(hex: hex(for: intent))
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                ? colour : colour.darkened(by: toolbarDeepening)
+        })
+    }
+
+    /// How far Light takes a toolbar glyph toward black. 0.3 puts every intent above 3.4:1
+    /// on `revisWindowBackground`; 0.24, the ring's step, left amber at exactly 3.0.
+    static let toolbarDeepening: CGFloat = 0.3
+
     /// Intent → colour as JSON, for pushing at the document runtime so the margin and the
     /// pane cannot drift apart. Assigned here rather than in JavaScript for exactly that
     /// reason: one source, two readers.

@@ -222,8 +222,10 @@ struct ReviewView: View {
                     Label(intent.title, systemImage: intent.symbol)
                 }
                 // Carrying the intent's own colour, which is the same colour its mark and
-                // its row will be. The toolbar is where that association is learned.
-                .foregroundStyle(AnnotationPalette.color(for: intent))
+                // its row will be. The toolbar is where that association is learned —
+                // deepened in Light, where the palette as it stands barely shows against
+                // the title bar; see `toolbarColor`.
+                .foregroundStyle(AnnotationPalette.toolbarColor(for: intent))
                 // Disabled rather than hidden: a control you can see and cannot use says
                 // why, and a missing one says nothing at all.
                 .disabled(!model.canAnnotate(intent))
@@ -267,7 +269,8 @@ extension ToolbarContent {
     /// From macOS 26 a toolbar sets its items on shared glass capsules, which put a
     /// second surface between the controls and the title bar — and, worse here, tint
     /// under the intent buttons, whose whole job is to carry the intent's own colour
-    /// unaltered (one source, two readers: the same colour the mark and the row get).
+    /// (one source, two readers: the same colour the mark and the row get). The Light
+    /// deepening in `toolbarColor` is a fixed step Swift decides; a glass tint is not.
     /// The controls sit straight on the title bar, as they did before, and on macOS 15
     /// there was nothing to take away.
     @ToolbarContentBuilder func withoutGlass() -> some ToolbarContent {
