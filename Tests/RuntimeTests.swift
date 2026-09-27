@@ -190,15 +190,18 @@ struct RuntimeTests {
 
     // MARK: - Fitting
 
-    /// `rvHold` narrows the sheet, and gives the width back on its own.
+    /// `rvHold` narrows the sheet by exactly the pane, and gives it back on its own.
     ///
-    /// Asserted on the width it SETS rather than the width it currently renders, and that
-    /// is not a dodge: the sheet eases to its new size over the pane's own beat, and it
-    /// releases itself a little after that — a window of about eighty milliseconds in which
-    /// a rendered measurement means what you think it means. Racing two timers to read a
-    /// number that is on its way somewhere would be a flaky test of the wrong thing. What
-    /// the hold promises is an explicit width while a pane is moving and no explicit width
-    /// afterwards, and that is exactly what is checked.
+    /// Asserted on the zoom it SETS rather than on what it currently renders: the sheet
+    /// eases over the pane's own beat and releases itself a little after, and racing two
+    /// timers to read a number on its way somewhere would be a flaky test of the wrong
+    /// thing. So the pane is said to have started a minute ago — older than the whole
+    /// animation — and the ease arrives in its first step, synchronously.
+    ///
+    /// "Exactly the pane" is the point. The hold used to give up the pane's width AND let
+    /// the fitted zoom give it up again as the viewport narrowed: on screen the sheet lost
+    /// twice the pane and sprang back at release. Nothing asserted the total, so nothing
+    /// noticed.
     @Test func aHeldSheetGivesTheRoomUpAndTakesItBack() async throws {
         let page = RuntimeHarness.spec()
         _ = await page.wait(for: "ready")
@@ -207,30 +210,31 @@ struct RuntimeTests {
 
         #expect(try await page.int("document.body.classList.contains('rv-fitting') ? 1 : 0")
                     == 1, "the sheet is not fitting, so there is nothing to hold")
-        let filled = try await page.int("document.getElementById('rv-page').offsetWidth")
         #expect(try await page.string("document.getElementById('rv-page').style.width") == "",
                 "a fitting sheet fills by layout and must carry no width of its own")
 
-        // Asserted in SCREEN points, which is what `rvHold` is given and what the pane
-        // actually takes. The sheet's own width is in the page's coordinate space, and
-        // while fitting that space is divided by the zoom — so the two numbers are only
-        // the same at 100%. Pinning the raw width instead pinned the arithmetic rather
-        // than the meaning, and said nothing at all about a fitted sheet on a wide window,
-        // which is every fitted sheet.
-        try await page.eval("window.rvHold(200);")
+        // In SCREEN points, which is what `rvHold` is given and what the pane takes: a
+        // pinned sheet is the nominal 920 times its zoom, so the zoom it gives up, times
+        // 920, is the room it gives up.
         let givenUp = try await page.int("""
             (function () {
               var page = document.getElementById('rv-page');
-              var z = parseFloat(getComputedStyle(page).zoom) || 1;
-              return Math.round((\(filled) - parseFloat(page.style.width)) * z);
+              var before = parseFloat(getComputedStyle(page).zoom);
+              window.rvHold(200, Date.now() - 60000, false);
+              return Math.round((before - parseFloat(page.style.zoom)) * 920);
             })()
             """)
         #expect(abs(givenUp - 200) <= 1, "gave up \(givenUp) points, expected 200")
+        #expect(try await page.string("document.getElementById('rv-page').style.width")
+                    == "920px", "a held sheet must not fill by layout — layout is the late one")
 
         // Past the release, which the runtime schedules for itself off the pane's duration.
         try await page.settle(Motion.panel.duration + 0.4)
-        #expect(try await page.string("document.getElementById('rv-page').style.width") == "",
-                "the sheet never took its width back")
+        for property in ["width", "zoom", "marginLeft"] {
+            #expect(try await page.string(
+                        "document.getElementById('rv-page').style.\(property)") == "",
+                    "the sheet never gave back its \(property)")
+        }
     }
 
     // MARK: - Laying a document flat

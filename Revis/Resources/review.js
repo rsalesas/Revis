@@ -60,6 +60,7 @@
   var selectedID = "";
   var tool = "select";
   var holding = 0;         // a setTimeout id while the sheet is pinned for a pane animation
+  var easing = 0;          // the frame request carrying a held sheet's zoom along the pane
   var ranges = {};         // annotation id -> Range, for hit-testing a click
 
   function post(name, payload) {
@@ -578,6 +579,9 @@
        window is resized far more often than the zoom is set, and a page that fitted when
        it opened and not afterwards is a page that stops fitting exactly when you notice. */
     fitting = !(typeof value === "number" && value > 0);
+    /* A held sheet's zoom is being stepped every frame; left running, it would write over
+       whatever is decided here on the very next one. */
+    if (easing) { cancelAnimationFrame(easing); easing = 0; }
     /* Fitting does not use a SCRIPTED zoom, and that is still the rule: anything script
        sets arrives a process and a resize event later, and for those frames the sheet is
        the wrong size and gets clipped. What changed is that it does not have to be script.
@@ -678,44 +682,84 @@
    * sliding in beside it.
    *
    * So when the app is about to take width off this view it says so first, and the sheet
-   * eases to the new width ITSELF, here, with the same curve and beat the pane is using.
-   * The point is where the animation runs: a width the page animates is driven inside the
-   * web process, one frame after another with nothing to ask anybody, where following the
-   * view means a message and an answer per frame and the answer is always late.
+   * eases to its new size ITSELF, here, on the pane's curve and beat. The point is where
+   * the animation runs: inside the web process, one frame after another with nothing to
+   * ask anybody, where following the view means a message and an answer per frame and the
+   * answer is always late.
    *
-   * The SAME duration, not a shorter one. Shortening it by a tenth was tried, on the
-   * argument that early is the safe direction to be wrong in — and it is, but the sheet is
-   * centred, so every point it leads by shows as HALF a point of the leading edge drifting
-   * out and walking back. A tenth measured 47 points of that. At the same duration the
-   * drift is 22, and the closest the sheet ever comes to the pane is six points of margin
-   * rather than none. Two small faults in opposite directions; this is the bottom of the
-   * curve between them.
+   * It eases the ZOOM, not the width. A fitted sheet's size on screen is its zoom — `calc`
+   * over `100vw`, in review.css — times the nominal 920. This used to ease the width, from
+   * before the fit became a zoom, and once it was one the pane came off TWICE: the width
+   * gave the pane up and the zoom, following the narrowing viewport, gave it up again.
+   * Measured opening a 300-point pane: 1109 → 590 on screen, springing back to 809 at
+   * release. Nor did the width ever ease — WebKit had it at its target 27 ms in, the
+   * transition declared and ignored — so the first frame took all 300 points in one step.
+   * Hence stepped per frame from here rather than declared as a CSS transition: a curve
+   * evaluated here does not depend on WebKit agreeing to animate anything.
    *
-   * Taking the width in ONE STEP was tried before either, and was worse than the fault it
-   * fixed: half of a three-hundred point step comes off each side, so the leading edge
-   * jumped a hundred and fifty points out and then walked back in.
+   * Easing a zoom AHEAD of the viewport, to a target known in advance, is the opposite of
+   * the easing `theSheetDoesNotEaseItsZoom` forbids — that one chased the viewport and so
+   * was always late, which on a sheet that must fill is a clipped sheet.
+   *
+   * Four things make it lead rather than trail, and each was measured missing:
+   *
+   *  - The width is PINNED at the nominal 920. Left `auto`, layout makes the sheet fill
+   *    whatever the page believes its viewport is, and the zoom only sizes the text inside
+   *    that: the screen width equalled the page's room on every frame whatever zoom it was
+   *    carrying — and the page's room is the late number.
+   *  - It is held against its LEFT gutter rather than centred. Centring is against the
+   *    page's own, late, viewport, so a centred sheet sits half the lag too far toward the
+   *    pane and the edge that should not move drifts in and walks back. The left gutter
+   *    is drawn from the view's own origin, which is never late — so for the outline,
+   *    opening on that side, the gap to the pane is simply right on every frame.
+   *  - It runs on the PANE's clock. The message lands a frame or two after the pane has
+   *    started; a curve begun on arrival is behind by that much the whole way. Swift stamps
+   *    the moment the pane starts, and `Date.now()` is the same clock in both processes.
+   *  - It runs a little EARLY, because a zoom set this frame is on screen a couple of
+   *    frames later. See the two leads beside `NOMINAL` for how much, and why they differ.
+   *
+   * At release the sheet exactly fills its room, so pinned and `auto`, anchored and centred,
+   * the inline zoom and the stylesheet's, are all the same place, and nothing moves.
+   *
+   * Taking the room in ONE STEP was tried before any of this, and was worse than the fault
+   * it fixed: half of a three-hundred point step comes off each side, so the edge away from
+   * the pane jumped a hundred and fifty points in and walked back.
    *
    * `paint()` is skipped while held: the marks are inside the sheet and move with it, so a
    * repaint per resize frame is work that changes nothing and slows the process being
-   * waited on. */
-  window.rvHold = function (points) {
+   * waited on. Nor is anything MEASURED per frame — a clamp that read the room each step
+   * forced a layout of the whole document inside the frame, and the page stalled 220 ms
+   * mid-travel with the sheet standing still under the pane. */
+  window.rvHold = function (points, startedAt, leading) {
     var page = document.getElementById("rv-page");
     if (!page) return;
     if (holding) { clearTimeout(holding); holding = 0; }
+    if (easing) { cancelAnimationFrame(easing); easing = 0; }
     if (!fitting || !(points > 0)) { release(page); return; }
 
     var ms = panelMs();
-    var from = page.offsetWidth;
-    page.style.transition = "none";
-    page.style.width = from + "px";
-    void page.offsetWidth;              // the transition needs a start it has already had
-    page.style.transition = "width " + ms + "ms " + motionCurve();
-    /* `points` is a pane's width on SCREEN; `width` is set in the page's own coordinate
-       space, which the zoom divides. Giving up the screen number unconverted made the
-       sheet surrender the pane's width times the zoom — at Fit on a wide window, more than
-       twice too much. */
-    var scale = zoom > 0 ? zoom : 1;
-    page.style.width = Math.max(200, from - points / scale) + "px";
+    var curve = cubicBezier(motionCurve());
+    /* From wherever it is now, which is not always the stylesheet's answer: a second pane
+       opened while the first is still travelling starts from mid-flight. */
+    var from = parseFloat(window.getComputedStyle(page).zoom) || zoom || 1;
+    /* The fit's own arithmetic with the pane taken off: the zoom is room over nominal, so
+       `points` fewer points of room is `points / NOMINAL` less zoom — exactly what the
+       stylesheet's calc says once the viewport has arrived. */
+    var to = Math.max(0.35, from - points / NOMINAL);
+    /* Clamped, so a stale or odd stamp costs nothing worse than starting now — or, for one
+       older than the whole animation, arriving at once. */
+    var late = typeof startedAt === "number" ? Date.now() - startedAt : 0;
+    var lead = leading ? HOLD_LEAD_LEADING_MS : HOLD_LEAD_MS;
+    var start = performance.now() - Math.max(0, Math.min(ms, (late || 0) + lead));
+
+    page.style.width = NOMINAL + "px";
+    page.style.marginLeft = "0";
+
+    (function step(now) {
+      var t = Math.min(1, (now - start) / ms);
+      page.style.zoom = from + (to - from) * curve(t);
+      easing = t < 1 ? requestAnimationFrame(step) : 0;
+    })(performance.now());              // NOT `start`, which is in the past on purpose
 
     holding = setTimeout(function () {
       holding = 0;
@@ -723,15 +767,50 @@
     }, ms + 120);
   };
 
-  /* Back to filling by layout — the width it has arrived at and the width layout would give
-     it are the same number by now, so there is nothing to see. Through `rvSetZoom` rather
-     than a bare repaint, because a window resized while the sheet was held is a fit the app
-     has not been told about. */
+  /* Back to filling by layout — the zoom it has arrived at and the one the stylesheet
+     computes are the same number by now, so there is nothing to see. Through `rvSetZoom`
+     rather than a bare repaint, because a window resized while the sheet was held is a fit
+     the app has not been told about — and `rvSetZoom(0)` is also what clears the inline
+     zoom the hold was carrying. The width goes back to `auto` in the same breath, and
+     that is a change of well under a point: at rest the fitted width is the room over the
+     zoom, and the room is 920 times the zoom and one point. */
   function release(page) {
-    page.style.transition = "";
+    if (easing) { cancelAnimationFrame(easing); easing = 0; }
     page.style.width = "";
+    page.style.marginLeft = "";
     if (fitting) window.rvSetZoom(0);
     else requestAnimationFrame(paint);
+  }
+
+  /* A CSS `cubic-bezier()` as a function of progress, so the sheet can be stepped along
+     exactly the curve the pane is on. Anything else it is handed — a keyword, nothing —
+     gets a plain ease-in-out rather than a straight line. */
+  function cubicBezier(css) {
+    var n = (css.match(/-?[0-9.]+/g) || []).map(parseFloat);
+    if (css.indexOf("cubic-bezier") !== 0 || n.length !== 4) {
+      return function (t) { return t * t * (3 - 2 * t); };
+    }
+    var x1 = n[0], y1 = n[1], x2 = n[2], y2 = n[3];
+    function at(a, b, s) { return ((1 - 3 * b + 3 * a) * s + (3 * b - 6 * a)) * s * s + 3 * a * s; }
+    function slope(a, b, s) { return 3 * (1 - 3 * b + 3 * a) * s * s + 2 * (3 * b - 6 * a) * s + 3 * a; }
+    return function (x) {
+      if (x <= 0) return 0;
+      if (x >= 1) return 1;
+      var s = x;
+      for (var i = 0; i < 8; i++) {           // Newton, which converges in a few here…
+        var d = slope(x1, x2, s);
+        if (Math.abs(d) < 1e-6) break;
+        s -= (at(x1, x2, s) - x) / d;
+      }
+      if (!(s >= 0 && s <= 1) || Math.abs(at(x1, x2, s) - x) > 1e-4) {
+        var lo = 0, hi = 1;                   // …and bisection where the slope is flat
+        for (var j = 0; j < 30; j++) {
+          s = (lo + hi) / 2;
+          if (at(x1, x2, s) < x) lo = s; else hi = s;
+        }
+      }
+      return at(y1, y2, s);
+    };
   }
 
   /* The pane animation's own beat and curve, read from the stylesheet rather than repeated
@@ -962,6 +1041,16 @@
      it with room to spare, which is no bad thing for something you press. */
   /* The sheet's nominal measure, matching `#rv-page { width: 920px }` in review.css. */
   var NOMINAL = 920;
+  /* How far AHEAD of the pane a held sheet runs. See `rvHold`. */
+  /* How far AHEAD of the pane a held sheet runs (see `rvHold`), one for each side, both
+     measured off screen recordings of the toggle. For the annotations pane, on the
+     trailing side, running late IS the clipped sheet — the gap to the pane went to
+     nothing for seven frames with no lead — and 50 keeps it at the gutter or wider. For
+     the outline, on the leading side, the gap to the pane looks after itself and the lead
+     only moves the FAR edge: none pushed it off the window for three frames, 50 pulled it
+     80 points in, 25 about 50, and 10 keeps it within 7 either way. */
+  var HOLD_LEAD_MS = 50;
+  var HOLD_LEAD_LEADING_MS = 10;
 
   var SLOT_W = 30;         // painted; the box a mark lives in
   var SLOT_H = 30;
