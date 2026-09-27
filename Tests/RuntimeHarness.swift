@@ -124,7 +124,7 @@ final class RuntimeHarness: NSObject, WKScriptMessageHandler, WKNavigationDelega
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
 
-    /// Long enough for the sheet's own width transition to finish — `rvHold` eases rather
+    /// Long enough for a held sheet's ease to finish — `rvHold` eases rather
     /// than steps, so a measurement taken a frame later reads the width it started from.
     func settleAfterTransition() async throws {
         try await settle(Motion.panel.duration + 0.15)

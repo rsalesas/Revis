@@ -254,16 +254,30 @@ thing, which is where this started. It works because of two changes made much la
   is harmless — the sheet is smaller than its room and takes a moment to fill it. Behind
   while SHRINKING is the bug everybody could see: the sheet is wider than the view, so its
   margin is clipped off and the white runs flush against the pane sliding in beside it.
-  So on opening the sheet EASES ITSELF to the new width, with the pane's own curve and
-  beat, as a CSS transition — which runs inside the web process, frame after frame, with
-  nothing to ask anybody. Closing needs no hold: growing late is only a margin that fills
-  in late.
+  So on opening the sheet EASES ITSELF to its new size, on the pane's own curve and beat,
+  stepped per frame inside the web process with nothing to ask anybody. Closing needs no
+  hold: growing late is only a margin that fills in late.
+
+  **It eases the ZOOM, with the width pinned at 920 and the sheet on its left gutter.**
+  This was a width transition from before the fit became a `calc` zoom over `100vw`, and
+  once it was one the pane came off twice — the width gave it up and the narrowing zoom
+  gave it up again: 1109 → 590 on screen, springing back to 809 at release. The width
+  transition was not even running (at its target 27 ms in). Left `auto`, the width fills
+  the page's own late viewport whatever the zoom is, so pinning is what makes the ease do
+  anything; centring is against that same late viewport, so the sheet sits on its left
+  gutter while held, which is drawn from the view's own origin and is never late.
+
+  **It runs on the pane's clock, and slightly ahead of it.** Swift stamps the moment the
+  pane starts (`Date.now()` is one clock across both processes); a curve begun on the
+  message's arrival trailed the pane all the way. And a zoom set this frame is on screen a
+  couple of frames later, so the sheet leads: 50 ms for the annotations pane, where late
+  IS the clipped sheet, 10 ms for the outline, where the lead only moves the far edge.
+  Leading was ruled out once because a CENTRED sheet turns every point of lead into half a
+  point of the far edge drifting — anchored, it does not.
 
   Taking the width in one step instead was worse than the fault: the sheet is centred, so
   half of a 300-point step comes off each side and the leading edge jumps 150 points out
-  and walks back. Shortening the sheet's transition to lead the pane trades the same fault
-  smaller — 47 points of drift at nine tenths, 22 at parity — against how close the sheet
-  comes to the pane. Parity is the bottom of that curve.
+  and walks back.
 
 - **`Motion.panel` starts slowly on purpose** — `cubic-bezier(0.65, 0, 0.35, 1)` over
   340 ms, not the hard ease-out it was. The old curve covered two thirds of the distance in

@@ -40,6 +40,7 @@ struct DocumentWebView: NSViewRepresentable {
     /// Width the document is about to lose, in points, and the token that pushes it. See
     /// `rvHold` in review.js: the sheet has to give the room up before the pane takes it.
     var pageHold: CGFloat
+    var pageHoldLeading: Bool
     var pageHoldToken: Int
 
     /// Bumped to scroll to `currentMark`.
@@ -163,7 +164,11 @@ struct DocumentWebView: NSViewRepresentable {
         // point of the hold is that it lands while the view is still its old size.
         if c.lastPageHoldToken != pageHoldToken {
             c.lastPageHoldToken = pageHoldToken
-            c.run("window.rvHold && window.rvHold(\(pageHold));")
+            // With the wall-clock moment the pane starts moving, which this pass is — the
+            // page shares the clock (`Date.now()`), so it can put the sheet where the pane
+            // IS rather than where it was when the message finally arrived.
+            let started = Date().timeIntervalSince1970 * 1000
+            c.run("window.rvHold && window.rvHold(\(pageHold), \(started), \(pageHoldLeading));")
         }
         if c.lastZoomToken != zoomToken {
             c.lastZoomToken = zoomToken

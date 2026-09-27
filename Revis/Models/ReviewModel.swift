@@ -85,6 +85,9 @@ final class ReviewModel: ObservableObject {
     /// animation clipped against the pane taking the room.
     @Published private(set) var pageHold: CGFloat = 0
     @Published private(set) var pageHoldToken = 0
+    /// Whether the pane taking that room opens on the LEADING edge — the page holds its
+    /// sheet differently for the two sides; see `rvHold`.
+    @Published private(set) var pageHoldLeading = false
     /// Which card has a reply composer open, and a token so pressing Reply on the card that
     /// already has one still refocuses the field.
     @Published var replyTarget: UUID?
@@ -433,6 +436,7 @@ final class ReviewModel: ObservableObject {
         guard pane.isOpen(self) != open else { return }
         if open {
             pageHold = pane.width
+            pageHoldLeading = pane == .outline
             pageHoldToken += 1
         }
         switch pane {

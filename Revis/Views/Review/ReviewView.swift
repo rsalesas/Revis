@@ -137,6 +137,7 @@ struct ReviewView: View {
             requestedZoom: model.requestedZoom,
             zoomToken: model.zoomToken,
             pageHold: model.pageHold,
+            pageHoldLeading: model.pageHoldLeading,
             pageHoldToken: model.pageHoldToken,
             revealToken: model.revealToken,
             revealBlock: model.revealBlock,
