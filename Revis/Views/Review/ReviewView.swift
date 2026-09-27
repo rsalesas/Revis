@@ -192,18 +192,30 @@ struct ReviewView: View {
         .withoutGlass()
 
         ToolbarItemGroup(placement: .principal) {
-            Picker("Tool", selection: $model.tool) {
-                ForEach(ReviewTool.allCases) { tool in
-                    Label(tool.title, systemImage: tool.symbol).tag(tool)
+            // Two buttons, the chosen one at full ink and the other stepped back — not a
+            // segmented picker. With the glass taken off (see `withoutGlass`) the picker
+            // lost its track and kept only the chosen segment's pill: a grey blob round
+            // the arrow with nothing beside it to say it was one of two.
+            ForEach(ReviewTool.allCases) { tool in
+                Button {
+                    model.tool = tool
+                } label: {
+                    Label(tool.title, systemImage: tool.symbol)
                 }
+                // Concrete colours, not `.primary`/`.tertiary`: a toolbar item resolves a
+                // hierarchical style to full label ink whatever level it names, so both
+                // tools came out #232323 and nothing said which was chosen. Secondary
+                // rather than tertiary for the other, because tertiary is how a DISABLED
+                // item looks and this one is only not chosen.
+                .foregroundStyle(Color(nsColor: model.tool == tool
+                                       ? .labelColor : .secondaryLabelColor))
+                .accessibilityAddTraits(model.tool == tool ? .isSelected : [])
+                .help(tool.help)
+                .disabled(model.isEmpty)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .help("Select text, or drag a box over part of the page")
-            .disabled(model.isEmpty)
 
-            // A divider, because these are two different questions. The picker on the left
-            // is HOW you are pointing; the buttons on the right are WHAT you are asking
+            // A divider, because these are two different questions. The tools on the left
+            // are HOW you are pointing; the buttons on the right are WHAT you are asking
             // for. Run together they read as one row of unrelated controls.
             //
             // Inside an `HStack` and given a height, because a bare `Divider()` is a
