@@ -36,7 +36,8 @@ packages:
   # products. `from:` let a fresh checkout float to 1.1.32 and fail to build; checkouts
   # that already had a resolved file never noticed, because the resolved file lives in the
   # generated, gitignored project. Moving this means checking the new tag's Package.swift
-  # for `unsafeFlags` on anything `ApexC` pulls in.
+  # for `unsafeFlags` on anything `ApexC` pulls in. Reported upstream as
+  # https://github.com/ApexMarkdown/apex/issues/36 — once that is fixed, this can move.
   Apex:
     url: https://github.com/ApexMarkdown/apex
     exactVersion: 1.1.21
