@@ -293,6 +293,21 @@ struct RuntimeTests {
         }
     }
 
+    // MARK: - Breakpoints
+
+    /// The document is laid out in the sheet, so its width breakpoints are asked of the
+    /// sheet. Asked of the window, which is wider, a report kept its contents rail beside
+    /// the text inside 786 pixels, and its tables broke words in half to fit what was left.
+    @Test func aWidthBreakpointIsAskedOfTheSheet() async throws {
+        let page = RuntimeHarness.spec("sidebar-layout.html")
+        _ = await page.wait(for: "ready")
+        let doc = try await page.int("document.getElementById('rv-doc').clientWidth")
+        let window = try await page.int("window.innerWidth")
+        let main = try await page.int("document.querySelector('main').offsetWidth")
+        #expect(window > 900 && doc < 900, "the harness no longer reproduces the case")
+        #expect(main > doc - 40, "main is \(main) of \(doc): the rail stayed beside it")
+    }
+
     // MARK: - Laying a document flat
 
     /// A document that scrolls inside itself is laid flat before anything is measured.
@@ -427,3 +442,4 @@ struct RuntimeTests {
         """) > 0, "the document flattened the desk the sheet sits on")
     }
 }
+

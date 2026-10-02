@@ -82,6 +82,34 @@ struct DocumentPrepTests {
         #expect(page.contains("id=\"rv-gutter\""))
     }
 
+    /// A width breakpoint asks the document's box, and nothing else is touched.
+    @Test func widthQueriesAskTheSheetNotTheWindow() {
+        let css = DocumentShell.measuredAgainstTheSheet("""
+        @media (max-width:900px){.wrap{display:block}}
+        @media only screen and (min-width: 40em) and (max-width: 60rem) { a { b: c } }
+        @media (max-width: 400px), (min-width: 1200px) { a { b: c } }
+        @media (width <= 700px) { a { b: c } }
+        @media print { nav { display: none } }
+        @media (prefers-color-scheme: dark) { a { b: c } }
+        @media screen and (max-width: 900px) and (orientation: portrait) { a { b: c } }
+        @media (max-device-width: 900px) { a { b: c } }
+        @media (max-width: 900px), print { a { b: c } }
+        /* @media (max-width: 1px) */ a::after { content: "@media (max-width: 1px) {" }
+        """)
+        #expect(css.contains("@container rv-doc (max-width:900px) {.wrap"))
+        // `em` and `rem` at 16 pixels, as a media query reads them.
+        #expect(css.contains("@container rv-doc (min-width: 640px) and (max-width: 960px) {"))
+        #expect(css.contains("@container rv-doc (max-width: 400px) or (min-width: 1200px) {"))
+        #expect(css.contains("@container rv-doc (width <= 700px) {"))
+        // Questions the window is the right one to answer stay asked of the window.
+        for kept in ["@media print {", "@media (prefers-color-scheme: dark) {",
+                     "@media screen and (max-width: 900px) and (orientation: portrait) {",
+                     "@media (max-device-width: 900px) {", "@media (max-width: 900px), print {",
+                     "/* @media (max-width: 1px) */", "content: \"@media (max-width: 1px) {\""] {
+            #expect(css.contains(kept), "rewrote \(kept)")
+        }
+    }
+
     /// The invariant the app rests on: reviewing a file must never modify it.
     ///
     /// Regression test with a real incident behind it — the first run against a real

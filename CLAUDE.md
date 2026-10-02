@@ -109,6 +109,10 @@ Both have a bug behind them; do not relax either.
   that way, and add a test to `Tests/SanitizerTests.swift` for anything you change.
 - `Document/DocumentShell.swift` — the CSP. `script-src 'none'` is absolute because the
   runtime is a user script; do not add a nonce or an inline `<script>` to the page.
+  Also where the document's width-only `@media` rules become `@container rv-doc`: the
+  document is laid out 786 pixels wide inside the sheet and zoomed to fill, while a media
+  query measures the wider window — so a report kept its desktop grid in a tablet's width
+  and its tables broke words in half. Anything that asks more than width is left alone.
 - `Resources/review.js` — runs in an isolated `WKContentWorld`. It stamps `data-rv`
   indices, computes anchors, and draws. Text highlights use the Custom Highlight API rather
   than wrapping spans, because wrapping mutates the DOM and every stored offset is measured

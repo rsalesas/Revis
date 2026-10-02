@@ -74,7 +74,7 @@ enum DocumentShell {
         \(chromeCSS)
         </style>
         <style>
-        \(useDocumentCSS ? prepared.css : "")
+        \(useDocumentCSS ? measuredAgainstTheSheet(prepared.css) : "")
         </style>
         \(sheetPaint(for: prepared, useDocumentCSS: useDocumentCSS))
         </head>
@@ -91,6 +91,108 @@ enum DocumentShell {
         </body>
         </html>
         """
+    }
+
+    /// The document's width breakpoints, asked of the box it is laid out in rather than of
+    /// the window.
+    ///
+    /// The sheet is 920 points of measure less its padding and the mark gutter, so the
+    /// document is laid out 786 CSS pixels wide and then zoomed to fill — but a media query
+    /// still measures the web view, which is wider. A document saying `@media (max-width:
+    /// 900px) { one column }` therefore kept its desktop grid, a 220-pixel contents rail
+    /// beside the text, squeezed into 786: its main column came out at 479 where a browser
+    /// that narrow gives 750, and a two-column table with `overflow-wrap: anywhere` broke
+    /// "What" into "Wha / t". The document had already said what it wants at that width; it
+    /// was asking the wrong box.
+    ///
+    /// So a rule that asks only about WIDTH becomes a container query against `#rv-doc`
+    /// (named `rv-doc` in review.css). Anything else — print, height, orientation, colour
+    /// scheme, a list mixing width with any of those — is left exactly as written: the
+    /// window is the right answer to those, or there is no better one. `screen` is dropped
+    /// because the web view always is one. `em` and `rem` become pixels at 16 each, which is
+    /// what a media query means by them; a container query would read the document's own
+    /// font size instead and move the breakpoint.
+    static func measuredAgainstTheSheet(_ css: String) -> String {
+        var out = ""
+        var i = css.startIndex
+        while i < css.endIndex {
+            let rest = css[i...]
+            // Comments and strings are copied whole, so an `@media` inside one is text.
+            if rest.hasPrefix("/*") {
+                let end = rest.range(of: "*/")?.upperBound ?? css.endIndex
+                out += css[i..<end]
+                i = end
+                continue
+            }
+            if css[i] == "\"" || css[i] == "'" {
+                var j = css.index(after: i)
+                while j < css.endIndex, css[j] != css[i] {
+                    if css[j] == "\\" { j = css.index(after: j) }
+                    if j < css.endIndex { j = css.index(after: j) }
+                }
+                let end = j < css.endIndex ? css.index(after: j) : css.endIndex
+                out += css[i..<end]
+                i = end
+                continue
+            }
+            if css[i] == "@", rest.prefix(6).lowercased() == "@media",
+               let brace = rest.firstIndex(where: { $0 == "{" || $0 == ";" }),
+               css[brace] == "{" {
+                let preludeStart = css.index(i, offsetBy: 6)
+                if let condition = containerCondition(String(css[preludeStart..<brace])) {
+                    out += "@container rv-doc \(condition) "
+                } else {
+                    out += css[i..<brace]
+                }
+                i = brace
+                continue
+            }
+            out.append(css[i])
+            i = css.index(after: i)
+        }
+        return out
+    }
+
+    /// One width test: `(max-width: 900px)`, or the range form `(width <= 900px)`. Not
+    /// `device-width`, and nothing with brackets inside it, which is where a `calc` lives.
+    private static let widthFeature =
+        #"\(\s*(?:(?:min-|max-)?width\s*:[^()]*|[^()]*?(?<![\w-])width(?![\w-])[^()]*[<>=][^()]*)\)"#
+
+    private static let widthOnly = try! NSRegularExpression(
+        pattern: "^\(widthFeature)(?:\\s+and\\s+\(widthFeature))*$")
+    private static let screenAnd = try! NSRegularExpression(
+        pattern: #"^(?:only\s+)?(?:screen|all)\s+and\s+"#)
+    private static let emLength = try! NSRegularExpression(pattern: #"(\d*\.?\d+)\s*r?em\b"#)
+
+    /// The prelude of an `@media` as a container condition, or nil if it asks anything
+    /// but width.
+    private static func containerCondition(_ prelude: String) -> String? {
+        var conditions: [String] = []
+        for part in prelude.split(separator: ",") {
+            var query = part.lowercased()
+                .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            query = screenAnd.stringByReplacingMatches(
+                in: query, range: NSRange(query.startIndex..., in: query), withTemplate: "")
+            let whole = NSRange(query.startIndex..., in: query)
+            guard !query.isEmpty, widthOnly.firstMatch(in: query, range: whole) != nil
+            else { return nil }
+            var pixels = query
+            for match in emLength.matches(in: query, range: whole).reversed() {
+                guard let range = Range(match.range, in: query),
+                      let number = Range(match.range(at: 1), in: query),
+                      let value = Double(query[number]) else { continue }
+                let px = value * 16
+                pixels.replaceSubrange(range, with: px == px.rounded()
+                                       ? "\(Int(px))px" : "\(px)px")
+            }
+            conditions.append(pixels)
+        }
+        guard !conditions.isEmpty else { return nil }
+        if conditions.count == 1 { return conditions[0] }
+        // A media query list is an OR; a container condition says so in words, and will
+        // not mix `and` with `or` without brackets.
+        return conditions.map { $0.contains(" and ") ? "(\($0))" : $0 }
+            .joined(separator: " or ")
     }
 
     /// The sheet takes the colour the document says its page is.

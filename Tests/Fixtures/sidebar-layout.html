@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Sidebar layout</title>
+<style>
+.wrap{max-width:1180px;margin:0 auto;padding:40px 24px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr);gap:0;padding:24px 16px}}
+</style></head><body>
+<!-- The shape of a generated report: a contents rail beside the text, folded away below
+     900 pixels. In the sheet the document is 786 wide, so it must fold. -->
+<div class="wrap"><nav><a href="#a">The story</a></nav>
+<main><h1>Report</h1><p id="a">The text column.</p></main></div>
+</body></html>
