@@ -61,6 +61,66 @@ struct SanitizerTests {
         #expect(report.remoteResources >= 2)
     }
 
+    @Test func anInlineChartKeepsItsGeometryAndPaint() {
+        // The shape of every chart in a generated report. Before SVG had a list of its own
+        // this came out as `<svg><circle /><text>Fri</text></svg>` — an empty frame.
+        let result = HTMLSanitizer.sanitize("""
+        <svg viewBox="0 0 860 218"><defs><marker id="a" refX="5" refY="3" orient="auto">\
+        <path d="M0 0L6 3L0 6z"/></marker></defs>\
+        <circle cx="130" cy="58" r="6" fill="#2a78d6" stroke="#fff" stroke-width="2"/>\
+        <line x1="1" y1="2" x2="3" y2="4" stroke-dasharray="5 5" marker-end="url(#a)"/>\
+        <text x="130" y="38" font-size="12.5" text-anchor="middle">Fri</text></svg>
+        """)
+        for kept in ["viewbox=\"0 0 860 218\"", "cx=\"130\"", "r=\"6\"", "fill=\"#2a78d6\"",
+                     "stroke-width=\"2\"", "d=\"M0 0L6 3L0 6z\"", "refx=\"5\"",
+                     "orient=\"auto\"", "x1=\"1\"", "stroke-dasharray=\"5 5\"",
+                     "x=\"130\"", "text-anchor=\"middle\"", "#a"] {
+            #expect(result.body.contains(kept), "dropped \(kept)")
+        }
+        #expect(result.report.isClean)
+    }
+
+    @Test func svgShapesStayClosedAndHTMLDoesNotPretend() {
+        // Without the slash the parser made the first `<line>` the parent of every shape
+        // after it, and a line draws no children.
+        let result = HTMLSanitizer.sanitize("""
+        <svg viewBox="0 0 10 10"><line x1="0" y1="0" x2="1" y2="1"/>\
+        <circle cx="5" cy="5" r="2"/><g><text>a</text></g></svg><div/><p>after</p>
+        """)
+        #expect(result.body.contains("<line x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\" />"))
+        #expect(result.body.contains("<circle cx=\"5\" cy=\"5\" r=\"2\" />"))
+        #expect(result.body.contains("</svg>"))
+        // Outside `<svg>` the slash is still not written: it would claim something the
+        // HTML parser does not do.
+        #expect(result.body.contains("<div>"))
+    }
+
+    @Test func anSVGAnimationCannotRewriteALink() {
+        // The classic way past an href check: the link is clean when it is checked, and an
+        // animation writes `javascript:` into it afterwards. `attributeName` is what names
+        // the target, so it is the attribute that must never be kept.
+        let result = HTMLSanitizer.sanitize("""
+        <svg><a href="#ok"><set attributeName="href" to="javascript:alert(1)"/>\
+        <animate attributeName="href" values="javascript:alert(1)"/><text>x</text></a></svg>
+        """)
+        #expect(!result.body.lowercased().contains("attributename"))
+        #expect(!result.body.lowercased().contains(" to="))
+    }
+
+    @Test func svgPaintAndImagesCannotReachOutward() {
+        let result = HTMLSanitizer.sanitize("""
+        <svg><rect fill="url(https://x.example/p.svg#g)" filter="url('//x.example/f')"/>\
+        <image href="https://x.example/i.png"/><use xlink:href="https://x.example/s.svg#a"/></svg>
+        """)
+        #expect(!result.body.contains("x.example/p"))
+        #expect(!result.body.contains("x.example/f"))
+        #expect(result.body.contains("fill=\"none\""))
+        // Kept as a record, not as a live reference, the way a remote `<img>` is.
+        #expect(!result.body.contains("href=\"https://x.example/i.png\""))
+        #expect(result.body.contains("data-rv-blocked=\"https://x.example/i.png\""))
+        #expect(result.report.remoteResources == 4)
+    }
+
     @Test func aDocumentCannotForgeAnAnchor() {
         // Our own addressing. A page that stamped its own indices could make a margin
         // marker point at a passage the reviewer never marked.

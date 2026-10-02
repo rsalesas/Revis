@@ -118,6 +118,62 @@ struct RuntimeTests {
         #expect(built.path == captured.path)
     }
 
+    /// A selection that ends on an ELEMENT ends there, not at the end of its block.
+    ///
+    /// A triple-clicked caption ends at (the next paragraph, 0). Measured by walking text
+    /// nodes for that paragraph, which is not one, the end came back as the whole figure's
+    /// length — and a comment on a caption was drawn over the reading below it as well.
+    @Test func aSelectionEndingOnAnElementEndsThere() async throws {
+        let page = RuntimeHarness.spec("chart-figure.html")
+        _ = await page.wait(for: "ready")
+        try await page.eval("""
+        (function () {
+          var caption = document.querySelector('figcaption');
+          var range = document.createRange();
+          range.setStart(caption.firstChild, 0);
+          range.setEnd(document.querySelector('p.read'), 0);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        })();
+        """)
+        let anchor = try #require(
+            Anchor.decode(try await page.string("window.rvCaptureSelection()")))
+        let captionStart = try await page.int(
+            "document.querySelector('figure').textContent.indexOf('One week at')")
+        #expect(anchor.quote == "One week at a client-services firm")
+        #expect(anchor.start == captionStart)
+        #expect(anchor.end == captionStart + "One week at a client-services firm".count)
+    }
+
+    /// A caption's highlight begins IN the caption, not at the end of the chart above it.
+    ///
+    /// The caption's first character is also the end of the "\n" before `</svg>`, and that
+    /// end is where a plain walk landed. WebKit paints a range begun there from the top of
+    /// the frame, so the legend wore the caption's wash and the current mark's underline.
+    /// Checked on the range rather than on pixels: the range is the thing we choose.
+    @Test func aCaptionsHighlightBeginsInTheCaption() async throws {
+        let page = RuntimeHarness.spec("chart-figure.html")
+        _ = await page.wait(for: "ready")
+        let block = try await page.int(
+            "parseInt(document.querySelector('figure').getAttribute('data-rv'), 10)")
+        let start = try await page.int(
+            "document.querySelector('figure').textContent.indexOf('One week at')")
+        try await page.setAnnotations([
+            ["id": "c", "intent": "change", "status": "open", "blocks": [block],
+             "start": start, "end": start + 34],
+        ])
+        #expect(try await page.string("""
+        (function () {
+          var found = '';
+          CSS.highlights.get('rv-change').forEach(function (r) {
+            found = r.startContainer.parentElement.tagName + ':' + r.startOffset + ':' + r;
+          });
+          return found;
+        })()
+        """) == "FIGCAPTION:0:One week at a client-services firm")
+    }
+
     // MARK: - Drawing
 
     /// Marks are drawn, one per annotation, and they carry an image.
