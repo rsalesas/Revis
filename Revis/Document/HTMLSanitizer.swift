@@ -94,6 +94,55 @@ enum HTMLSanitizer {
         "align", "valign", "cite", "abbr", "loading", "decoding",
     ]
 
+    /// An inline SVG's geometry and paint, kept on the same terms as the list above.
+    ///
+    /// The list above was written for HTML, and an `<svg>` survived it as an empty frame:
+    /// `viewBox`, `x`, `cx`, `d` and `fill` all went, so every circle and line had no
+    /// position or size and every label sat at the origin, above the box and clipped. A
+    /// generated report draws its charts this way, and a chart with its numbers stripped
+    /// is not the document that was sent.
+    ///
+    /// Lowercase because keys are compared lowercased and written back that way; the HTML
+    /// parser restores `viewBox` and the rest from its own table when it reads them inside
+    /// `<svg>`. **`attributeName` is left off on purpose, and must stay off.** It is what
+    /// lets `<set>` or `<animate>` write `href` on a link after the URL check has been and
+    /// gone — `to="javascript:…"` — and without it every animation element targets
+    /// nothing, which is also why `values` (a colour matrix's, and an animation's) is safe
+    /// to keep. A value holding `url(…)` goes through the stylesheet's URL rewrite, so a
+    /// fill can name a gradient on the page and cannot name one on a server.
+    private static let svgAttributes: Set<String> = [
+        // Geometry.
+        "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "fx", "fy", "fr",
+        "dx", "dy", "d", "points", "pathlength", "viewbox", "preserveaspectratio",
+        "transform", "transform-origin", "rotate", "textlength", "lengthadjust",
+        "startoffset", "offset",
+        // Gradients, patterns, markers, clips and masks.
+        "gradientunits", "gradienttransform", "spreadmethod", "patternunits",
+        "patterncontentunits", "patterntransform", "markerwidth", "markerheight",
+        "markerunits", "refx", "refy", "orient", "clippathunits", "maskunits",
+        "maskcontentunits", "stop-color", "stop-opacity",
+        // The filters a chart reaches for: blur, shadow, colour matrix, blend.
+        "filterunits", "primitiveunits", "in", "in2", "result", "stddeviation", "mode",
+        "operator", "values", "flood-color", "flood-opacity",
+        "color-interpolation", "color-interpolation-filters",
+        // Paint and text.
+        "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity",
+        "stroke-dasharray", "stroke-dashoffset", "stroke-linecap", "stroke-linejoin",
+        "stroke-miterlimit", "opacity", "color", "display", "visibility", "overflow",
+        "clip-path", "clip-rule", "mask", "filter", "marker-start", "marker-mid",
+        "marker-end", "paint-order", "vector-effect", "shape-rendering", "text-rendering",
+        "image-rendering", "mix-blend-mode", "isolation",
+        "font-family", "font-size", "font-weight", "font-style", "font-variant",
+        "font-stretch", "letter-spacing", "word-spacing", "text-anchor", "text-decoration",
+        "dominant-baseline", "alignment-baseline", "baseline-shift", "writing-mode",
+        "direction",
+    ]
+
+    /// SVG elements whose `href` is a fetch rather than a link. A remote one is kept as a
+    /// record, the way a remote `<img src>` is, instead of being left live for the CSP to
+    /// refuse.
+    private static let svgLoaders: Set<String> = ["image", "use", "feimage"]
+
     /// Attributes holding a URL, checked against `isSafeURL` rather than allowed outright.
     private static let urlAttributes: Set<String> = [
         "href", "src", "srcset", "poster", "action", "data", "background",
@@ -121,6 +170,9 @@ enum HTMLSanitizer {
         /// included — is thrown away until it closes.
         var suppressDepth = 0
         var suppressTag = ""
+        /// How many `<svg>` or `<math>` elements we are inside. In there the parser
+        /// honours a self-closing slash, so `rebuild` has to write it back.
+        var foreignDepth = 0
 
         while i < scalars.count {
             guard scalars[i] == "<" else {
@@ -206,12 +258,16 @@ enum HTMLSanitizer {
                 continue
             }
             if unwrap.contains(name) { continue }
+            let opensForeign = name == "svg" || name == "math"
             if tag.isClosing {
+                if opensForeign { foreignDepth = max(0, foreignDepth - 1) }
                 out += "</\(name)>"
                 continue
             }
 
-            out += rebuild(tag, report: &report)
+            out += rebuild(tag, inForeignContent: foreignDepth > 0 || opensForeign,
+                           report: &report)
+            if opensForeign, !tag.isSelfClosing { foreignDepth += 1 }
         }
 
         return SanitizedHTML(body: out, css: css, title: title, report: report)
@@ -240,7 +296,8 @@ enum HTMLSanitizer {
     // MARK: - Rebuilding a start tag
 
     /// Writes the tag back out with only the attributes that survived the policy.
-    private static func rebuild(_ tag: Tag, report: inout SanitizationReport) -> String {
+    private static func rebuild(_ tag: Tag, inForeignContent: Bool,
+                                report: inout SanitizationReport) -> String {
         var out = "<" + tag.name
         for attribute in tag.attributes {
             let key = attribute.name.lowercased()
@@ -266,7 +323,9 @@ enum HTMLSanitizer {
                     // would refuse to fetch it anyway, and rewriting it to nothing would
                     // leave an image with no sign of what it was meant to be.
                     report.remoteResources += 1
-                    if key == "src" { out += " data-rv-blocked=\"\(escapeAttribute(value))\"" }
+                    let fetches = key == "src"
+                        || (key.hasSuffix("href") && svgLoaders.contains(tag.name))
+                    if fetches { out += " data-rv-blocked=\"\(escapeAttribute(value))\"" }
                     else if key == "href" { out += " href=\"\(escapeAttribute(value))\"" }
                 case .dangerous:
                     report.dangerousURLs += 1
@@ -284,6 +343,15 @@ enum HTMLSanitizer {
                 }
                 continue
             }
+            if svgAttributes.contains(key) {
+                guard let value = attribute.value else { continue }
+                var inner = SanitizationReport()
+                let kept = value.range(of: "url(", options: .caseInsensitive) == nil
+                    ? value : rewriteCSSURLs(value, report: &inner)
+                report.remoteResources += inner.remoteResources
+                out += " \(key)=\"\(escapeAttribute(kept))\""
+                continue
+            }
             guard safeAttributes.contains(key) || key.hasPrefix("data-") || key.hasPrefix("aria-")
             else { continue }
             if let value = attribute.value {
@@ -294,8 +362,13 @@ enum HTMLSanitizer {
         }
         // Self-closing syntax is meaningless on an HTML void element and harmful on a
         // non-void one (browsers ignore the slash and the element swallows the rest of the
-        // document), so it is written only where it is true.
-        out += voidElements.contains(tag.name) ? " />" : ">"
+        // document), so it is written only where it is true. Inside `<svg>` it IS true —
+        // the parser closes `<circle/>` there — and leaving it off made the first
+        // `<line/>` of a chart the parent of everything drawn after it, none of which a
+        // line renders: one dashed rule in an empty frame.
+        let closesItself = voidElements.contains(tag.name)
+            || (inForeignContent && tag.isSelfClosing)
+        out += closesItself ? " />" : ">"
         return out
     }
 
@@ -364,9 +437,9 @@ enum HTMLSanitizer {
             out = out.replacingOccurrences(of: "@import", with: "/*removed*/",
                                            options: .caseInsensitive)
         }
-        // `url(` pointing anywhere but at an inline data image. Rewritten to `none` rather
-        // than deleted so the declaration stays syntactically whole — a half-removed value
-        // can take the rest of the rule with it.
+        // `url(` pointing anywhere but at an inline data image or the page's own `#id`.
+        // Rewritten to `none` rather than deleted so the declaration stays syntactically
+        // whole — a half-removed value can take the rest of the rule with it.
         out = rewriteCSSURLs(out, report: &report)
         return out
     }
@@ -383,7 +456,10 @@ enum HTMLSanitizer {
             }
             let inner = rest[open.upperBound..<close]
                 .trimmingCharacters(in: CharacterSet(charactersIn: " \t\n'\""))
-            if classifyURL(inner) == .safe, inner.lowercased().hasPrefix("data:") {
+            // A fragment is kept too: `url(#arrow)` names a marker or gradient already on
+            // the page, and a chart's arrowheads are drawn with nothing else.
+            if classifyURL(inner) == .safe,
+               inner.lowercased().hasPrefix("data:") || inner.hasPrefix("#") {
                 out += "url(\"\(inner)\")"
             } else {
                 report.remoteResources += 1

@@ -326,27 +326,50 @@
    * whatever reads the export. Walking nodes to find it is an implementation detail that
    * ends here. */
   function offsetWithin(block, node, nodeOffset) {
-    var walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null);
-    var total = 0, current;
-    while ((current = walker.nextNode())) {
-      if (current === node) return total + nodeOffset;
-      total += current.nodeValue.length;
+    /* Measured as the text of a range from the block's start, not by walking text nodes
+       until `node` turns up: a selection can end on an ELEMENT — a triple-clicked caption
+       ends at (the next paragraph, 0) — and a walk looking for an element among text
+       nodes never finds it and answered the whole block's length. A comment on a figure's
+       caption came back as the caption plus everything after it. A range's text is the
+       same sum of text nodes `positionAt` walks, so the two still agree. */
+    var range = document.createRange();
+    range.selectNodeContents(block);
+    try {
+      range.setEnd(node, nodeOffset);
+    } catch (e) {
+      return block.textContent.length;
     }
-    return total;
+    return Math.min(range.toString().length, block.textContent.length);
   }
 
   /* The inverse: a DOM position for a character offset, so a stored anchor can be drawn
-     again after a reload. */
-  function positionAt(block, offset) {
+     again after a reload.
+   *
+   * `forward` is for the START of a span. An offset on a boundary between two text nodes
+   * is the end of one and the beginning of the next — the same character, two DOM
+   * positions — and the end of the previous node is what a plain walk finds. For a
+   * figure's caption that was the "\n" left inside the `<svg>` above it, a node with no
+   * box of its own, and WebKit painted a highlight starting there from the top of the
+   * chart's frame: the legend took the caption's wash and the current mark's underline,
+   * kept until a resize happened to repaint it. Measured: the same words with the range
+   * begun at the caption's own text paint only the caption. So a start skips forward past
+   * a tail that is nothing but whitespace, to the next node with words in it. */
+  function positionAt(block, offset, forward) {
     var walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null);
-    var total = 0, current, last = null;
+    var total = 0, current, last = null, fallback = null;
     while ((current = walker.nextNode())) {
       var length = current.nodeValue.length;
-      if (offset <= total + length) return { node: current, offset: offset - total };
+      if (offset <= total + length) {
+        var at = Math.max(0, offset - total);
+        if (!forward || /\S/.test(current.nodeValue.slice(at))) {
+          return { node: current, offset: at };
+        }
+        fallback = fallback || { node: current, offset: at };
+      }
       total += length;
       last = current;
     }
-    return last ? { node: last, offset: last.nodeValue.length } : null;
+    return fallback || (last ? { node: last, offset: last.nodeValue.length } : null);
   }
 
   /* Everything the app needs to know about a text selection.
@@ -953,7 +976,8 @@
       if (a.start < 0 || a.rect) continue;      // block or region: no text run to mark
       var block = blocks[a.blocks[0]];
       if (!block) continue;
-      var from = positionAt(block, a.start), to = positionAt(block, a.end);
+      // Forward only for a span: a point (an insertion) must not start after it ends.
+      var from = positionAt(block, a.start, a.start < a.end), to = positionAt(block, a.end);
       if (!from || !to) continue;
       var range = document.createRange();
       try {

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Chart figure</title>
+<style>
+.frame{background:#fff;border:1px solid #e4e1d8;border-radius:12px;padding:14px}
+.frame svg{display:block;width:100%;height:auto}
+.lg{display:flex;gap:6px 18px;font-size:12.5px;margin:0 2px 10px}
+.lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+</style></head><body>
+<!-- The shape of a generated report's chart: a legend, an inline SVG drawn with
+     self-closing shapes, a caption, and a reading of it, all in one figure. The
+     whitespace before </svg> matters: it is the text node a caption's highlight used to
+     begin in. -->
+<p>The week, drawn.</p>
+<figure><div class="frame">
+<div class="lg"><span><i style="background:#2a78d6"></i>The firm</span><span><i style="background:#eb6834"></i>The client</span></div>
+<svg viewBox="0 0 400 80" role="img" aria-label="One week">
+<line x1="20" y1="40" x2="380" y2="40" stroke="#e4e1d8" stroke-width="2"/>
+<g stroke="#fff" stroke-width="2"><circle cx="20" cy="40" r="6" fill="#2a78d6"/><circle cx="380" cy="40" r="6" fill="#eb6834"/></g>
+<g font-size="12" text-anchor="middle"><text x="20" y="20">Fri 16:00</text><text x="380" y="20">Tue 10:00</text></g>
+</svg></div><figcaption>One week at a client-services firm</figcaption><p class="read">The page and the call are the same.</p></figure>
+</body></html>
